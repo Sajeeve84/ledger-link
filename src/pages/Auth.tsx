@@ -12,8 +12,6 @@ const emailSchema = z.string().email("Please enter a valid email address");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 const nameSchema = z.string().min(2, "Name must be at least 2 characters");
 
-type Role = "firm" | "accountant" | "client";
-
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -21,9 +19,6 @@ export default function Auth() {
   const { toast } = useToast();
 
   const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
-  const [selectedRole, setSelectedRole] = useState<Role>(
-    (searchParams.get("role") as Role) || "firm"
-  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -69,7 +64,8 @@ export default function Auth() {
 
     try {
       if (isSignUp) {
-        const { error } = await signUp(email, password, fullName, selectedRole);
+        // Only firms can self-register
+        const { error } = await signUp(email, password, fullName, "firm");
         if (error) {
           toast({
             title: "Sign up failed",
@@ -103,12 +99,6 @@ export default function Auth() {
       setLoading(false);
     }
   };
-
-  const roles = [
-    { id: "firm", label: "Accounting Firm", icon: Building, description: "Manage your firm and team" },
-    { id: "accountant", label: "Accountant", icon: User, description: "Join a firm as an accountant" },
-    { id: "client", label: "Client", icon: FileUp, description: "Upload documents to your accountant" },
-  ] as const;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -151,50 +141,33 @@ export default function Auth() {
 
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">
-              {isSignUp ? "Create your account" : "Welcome back"}
+              {isSignUp ? "Register Your Firm" : "Welcome back"}
             </h2>
             <p className="text-muted-foreground mt-2">
               {isSignUp
-                ? "Get started with DocuFlow today"
+                ? "Create your accounting firm account"
                 : "Sign in to access your dashboard"}
             </p>
+            {isSignUp && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Accountants and clients are invited by firm administrators.
+              </p>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {isSignUp && (
               <>
-                {/* Role Selection */}
-                <div className="space-y-3">
-                  <Label className="text-foreground">I am a...</Label>
-                  <div className="grid grid-cols-1 gap-3">
-                    {roles.map((role) => (
-                      <button
-                        key={role.id}
-                        type="button"
-                        onClick={() => setSelectedRole(role.id)}
-                        className={`p-4 rounded-lg border-2 text-left transition-all ${
-                          selectedRole === role.id
-                            ? "border-accent bg-accent/5"
-                            : "border-border hover:border-accent/50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                              selectedRole === role.id
-                                ? "bg-accent text-accent-foreground"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            <role.icon className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-foreground">{role.label}</p>
-                            <p className="text-sm text-muted-foreground">{role.description}</p>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
+                {/* Firm indicator */}
+                <div className="p-4 rounded-lg border-2 border-accent bg-accent/5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
+                      <Building className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">Accounting Firm</p>
+                      <p className="text-sm text-muted-foreground">Manage your firm and team</p>
+                    </div>
                   </div>
                 </div>
 
@@ -258,7 +231,7 @@ export default function Auth() {
               className="w-full"
               disabled={loading}
             >
-              {loading ? "Please wait..." : isSignUp ? "Create Account" : "Sign In"}
+              {loading ? "Please wait..." : isSignUp ? "Register Firm" : "Sign In"}
             </Button>
           </form>
 
@@ -269,7 +242,7 @@ export default function Auth() {
               onClick={() => setIsSignUp(!isSignUp)}
               className="text-accent hover:underline font-medium"
             >
-              {isSignUp ? "Sign in" : "Sign up"}
+              {isSignUp ? "Sign in" : "Register your firm"}
             </button>
           </p>
         </div>
