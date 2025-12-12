@@ -148,30 +148,50 @@ export default function FirmDashboard() {
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firmId || !inviteEmail) return;
+    if (!firmId || !inviteEmail || !user) return;
 
     setLoading(true);
 
     try {
-      // Generate invite link
-      const inviteLink = `${window.location.origin}/invite?role=${inviteType}&firm=${firmId}&email=${encodeURIComponent(inviteEmail)}`;
+      // Create secure invite token in database
+      const { data: tokenData, error: tokenError } = await supabase
+        .from("invite_tokens")
+        .insert({
+          firm_id: firmId,
+          email: inviteEmail,
+          role: inviteType,
+          created_by: user.id,
+        })
+        .select("token")
+        .single();
+
+      if (tokenError || !tokenData) {
+        toast({
+          title: "Error",
+          description: "Failed to create invite token",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Generate secure invite link with token
+      const inviteLink = `${window.location.origin}/invite?token=${tokenData.token}`;
       
       // Copy to clipboard
       await navigator.clipboard.writeText(inviteLink);
       
       toast({
         title: "Invite Link Copied!",
-        description: `Share this link with the ${inviteType} to complete their registration.`,
+        description: `Share this link with the ${inviteType}. Link expires in 48 hours.`,
       });
       setDialogOpen(false);
       setInviteEmail("");
     } catch (err) {
       toast({
-        title: "Invite Link Generated",
-        description: `Send this link to the ${inviteType}: ${window.location.origin}/invite?role=${inviteType}&firm=${firmId}&email=${encodeURIComponent(inviteEmail)}`,
+        title: "Error",
+        description: "Failed to generate invite link",
+        variant: "destructive",
       });
-      setDialogOpen(false);
-      setInviteEmail("");
     } finally {
       setLoading(false);
     }
