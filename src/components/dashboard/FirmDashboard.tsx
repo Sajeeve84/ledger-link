@@ -153,11 +153,22 @@ export default function FirmDashboard() {
     setLoading(true);
 
     try {
-      // In a real app, you'd send an invitation email
-      // For now, we'll show instructions
+      // Generate invite link
+      const inviteLink = `${window.location.origin}/invite?role=${inviteType}&firm=${firmId}&email=${encodeURIComponent(inviteEmail)}`;
+      
+      // Copy to clipboard
+      await navigator.clipboard.writeText(inviteLink);
+      
       toast({
-        title: "Invitation Info",
-        description: `To add a ${inviteType}, have them sign up with email: ${inviteEmail} and select "${inviteType}" role. Then you can link them to your firm.`,
+        title: "Invite Link Copied!",
+        description: `Share this link with the ${inviteType} to complete their registration.`,
+      });
+      setDialogOpen(false);
+      setInviteEmail("");
+    } catch (err) {
+      toast({
+        title: "Invite Link Generated",
+        description: `Send this link to the ${inviteType}: ${window.location.origin}/invite?role=${inviteType}&firm=${firmId}&email=${encodeURIComponent(inviteEmail)}`,
       });
       setDialogOpen(false);
       setInviteEmail("");
