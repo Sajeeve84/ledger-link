@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { FileUp, Mail, Lock, User, ArrowLeft, Users, Building } from "lucide-react";
+import { FileUp, Mail, Lock, User, ArrowLeft, Users, Building, Loader2 } from "lucide-react";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Please enter a valid email address");
@@ -14,34 +14,85 @@ const nameSchema = z.string().min(2, "Name must be at least 2 characters");
 
 type InviteRole = "accountant" | "client";
 
+interface TokenData {
+  token: string;
+  firm_id: string;
+  email: string;
+  role: InviteRole;
+  expires_at: string;
+  used_at: string | null;
+}
+
 export default function Invite() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const token = searchParams.get("token");
-  const roleParam = searchParams.get("role") as InviteRole | null;
-  const firmIdParam = searchParams.get("firm");
-  const emailParam = searchParams.get("email");
+  const tokenParam = searchParams.get("token");
 
-  const [email, setEmail] = useState(emailParam || "");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [validating, setValidating] = useState(true);
   const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
-  const [validInvite, setValidInvite] = useState(false);
-  const [role, setRole] = useState<InviteRole | null>(roleParam);
-  const [firmId, setFirmId] = useState<string | null>(firmIdParam);
+  const [tokenData, setTokenData] = useState<TokenData | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Validate invite parameters
-    if (roleParam && firmIdParam && (roleParam === "accountant" || roleParam === "client")) {
-      setValidInvite(true);
-      setRole(roleParam);
-      setFirmId(firmIdParam);
-    }
-  }, [roleParam, firmIdParam]);
+    const validateToken = async () => {
+      if (!tokenParam) {
+        setErrorMessage("No invitation token provided");
+        setValidating(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("invite_tokens")
+          .select("token, firm_id, email, role, expires_at, used_at")
+          .eq("token", tokenParam)
+          .maybeSingle();
+
+        if (error || !data) {
+          setErrorMessage("Invalid or expired invitation link");
+          setValidating(false);
+          return;
+        }
+
+        // Check if token is expired
+        if (new Date(data.expires_at) < new Date()) {
+          setErrorMessage("This invitation link has expired");
+          setValidating(false);
+          return;
+        }
+
+        // Check if token is already used
+        if (data.used_at) {
+          setErrorMessage("This invitation link has already been used");
+          setValidating(false);
+          return;
+        }
+
+        // Validate role
+        if (data.role !== "accountant" && data.role !== "client") {
+          setErrorMessage("Invalid invitation type");
+          setValidating(false);
+          return;
+        }
+
+        setTokenData(data as TokenData);
+        setEmail(data.email);
+        setValidating(false);
+      } catch (err) {
+        setErrorMessage("Failed to validate invitation");
+        setValidating(false);
+      }
+    };
+
+    validateToken();
+  }, [tokenParam]);
 
   const validate = () => {
     const newErrors: typeof errors = {};
@@ -68,7 +119,7 @@ export default function Invite() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validate() || !role || !firmId) return;
+    if (!validate() || !tokenData) return;
     
     setLoading(true);
 
@@ -97,10 +148,10 @@ export default function Invite() {
       }
 
       if (data.user) {
-        // Add user role
+        // Add user role from verified token (not from URL params)
         const { error: roleError } = await supabase
           .from("user_roles")
-          .insert({ user_id: data.user.id, role });
+          .insert({ user_id: data.user.id, role: tokenData.role });
 
         if (roleError) {
           toast({
@@ -111,11 +162,11 @@ export default function Invite() {
           return;
         }
 
-        // Link to firm based on role
-        if (role === "accountant") {
+        // Link to firm based on role from verified token
+        if (tokenData.role === "accountant") {
           const { error: linkError } = await supabase
             .from("firm_accountants")
-            .insert({ firm_id: firmId, accountant_id: data.user.id });
+            .insert({ firm_id: tokenData.firm_id, accountant_id: data.user.id });
 
           if (linkError) {
             toast({
@@ -125,11 +176,11 @@ export default function Invite() {
             });
             return;
           }
-        } else if (role === "client") {
+        } else if (tokenData.role === "client") {
           const { error: linkError } = await supabase
             .from("clients")
             .insert({ 
-              firm_id: firmId, 
+              firm_id: tokenData.firm_id, 
               user_id: data.user.id,
               company_name: companyName || null
             });
@@ -144,6 +195,12 @@ export default function Invite() {
           }
         }
 
+        // Mark token as used
+        await supabase
+          .from("invite_tokens")
+          .update({ used_at: new Date().toISOString() })
+          .eq("token", tokenData.token);
+
         toast({
           title: "Account created!",
           description: "Welcome to DocuFlow. Redirecting to dashboard...",
@@ -155,13 +212,26 @@ export default function Invite() {
     }
   };
 
-  if (!validInvite) {
+  // Loading state while validating token
+  if (validating) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-8">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">Validating invitation...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (errorMessage || !tokenData) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-8">
         <div className="text-center space-y-4">
           <h1 className="text-2xl font-bold text-foreground">Invalid Invitation</h1>
           <p className="text-muted-foreground">
-            This invitation link is invalid or has expired.
+            {errorMessage || "This invitation link is invalid or has expired."}
           </p>
           <Link to="/auth">
             <Button variant="outline">Go to Login</Button>
@@ -184,7 +254,7 @@ export default function Invite() {
     }
   };
 
-  const RoleIcon = role ? roleInfo[role].icon : Users;
+  const RoleIcon = roleInfo[tokenData.role].icon;
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -205,7 +275,7 @@ export default function Invite() {
             You're Invited!
           </h1>
           <p className="text-primary-foreground/80 text-lg max-w-md">
-            {role && roleInfo[role].description}
+            {roleInfo[tokenData.role].description}
           </p>
         </div>
         <p className="text-primary-foreground/60 text-sm">
@@ -238,8 +308,8 @@ export default function Invite() {
                   <RoleIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">{role && roleInfo[role].label}</p>
-                  <p className="text-sm text-muted-foreground">{role && roleInfo[role].description}</p>
+                  <p className="font-medium text-foreground">{roleInfo[tokenData.role].label}</p>
+                  <p className="text-sm text-muted-foreground">{roleInfo[tokenData.role].description}</p>
                 </div>
               </div>
             </div>
@@ -262,7 +332,7 @@ export default function Invite() {
             </div>
 
             {/* Company Name - only for clients */}
-            {role === "client" && (
+            {tokenData.role === "client" && (
               <div className="space-y-2">
                 <Label htmlFor="companyName" className="text-foreground">Company Name (Optional)</Label>
                 <div className="relative">
@@ -291,7 +361,7 @@ export default function Invite() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
-                  readOnly={!!emailParam}
+                  readOnly
                 />
               </div>
               {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
