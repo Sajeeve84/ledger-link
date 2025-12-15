@@ -22,8 +22,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserRole = async (userId: string) => {
-    const { data } = await supabase
+  const fetchUserRole = async (userId: string, retryCount = 0): Promise<void> => {
+    const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
@@ -31,6 +31,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (data) {
       setUserRole(data.role as UserRole);
+    } else if (retryCount < 3) {
+      // Retry after a short delay - role might not be inserted yet after signup
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return fetchUserRole(userId, retryCount + 1);
     }
   };
 
@@ -80,21 +84,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) return { error };
 
-    if (data.user) {
-      // Add user role
+    if (data.user && data.session) {
+      // User is confirmed and signed in - add role
       const { error: roleError } = await supabase
         .from("user_roles")
         .insert({ user_id: data.user.id, role });
 
-      if (roleError) return { error: roleError };
+      if (roleError) {
+        console.error("Role insert error:", roleError);
+        return { error: roleError };
+      }
+
+      // Set role immediately
+      setUserRole(role);
 
       // If firm role, create a firm record
       if (role === "firm") {
-        await supabase.from("firms").insert({
+        const { error: firmError } = await supabase.from("firms").insert({
           name: `${fullName}'s Firm`,
           owner_id: data.user.id,
         });
+        
+        if (firmError) {
+          console.error("Firm insert error:", firmError);
+        }
       }
+    } else if (data.user) {
+      // User created but email confirmation required
+      // This shouldn't happen with auto-confirm enabled
+      console.warn("User created but no session - email confirmation may be required");
     }
 
     return { error: null };

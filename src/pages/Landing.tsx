@@ -75,15 +75,15 @@ export default function Landing() {
               Connect your clients with your accounting team through a simple, secure document management platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Link to="/auth?mode=signup&role=firm">
+              <Link to="/auth?mode=signup">
                 <Button variant="hero" size="xl">
-                  Start as Firm
+                  Register Your Firm
                   <ArrowRight className="w-5 h-5" />
                 </Button>
               </Link>
-              <Link to="/auth?mode=signup&role=client">
+              <Link to="/auth">
                 <Button variant="outline" size="xl">
-                  I'm a Client
+                  Sign In
                 </Button>
               </Link>
             </div>
