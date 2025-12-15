@@ -14,7 +14,7 @@ import {
   Upload,
   Camera,
   Image,
-  File,
+  File as FileIcon,
   Clock,
   CheckCircle,
   AlertTriangle,
@@ -522,7 +522,7 @@ export default function ClientDashboard() {
                 onClick={() => fileInputRef.current?.click()}
                 className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all active:scale-95"
               >
-                <File className="w-8 h-8 text-accent" />
+                <FileIcon className="w-8 h-8 text-accent" />
                 <span className="text-sm font-medium text-foreground">Files</span>
               </button>
             </div>
@@ -555,7 +555,7 @@ export default function ClientDashboard() {
                     <div key={index} className="relative group">
                       {preview === "pdf" ? (
                         <div className="aspect-square rounded-lg bg-secondary flex items-center justify-center">
-                          <File className="w-8 h-8 text-muted-foreground" />
+                          <FileIcon className="w-8 h-8 text-muted-foreground" />
                         </div>
                       ) : (
                         <img
