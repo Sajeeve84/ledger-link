@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCamera } from "@/hooks/useCamera";
 import DashboardLayout from "./DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +58,7 @@ interface Notification {
 export default function ClientDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isNative, takePhoto, pickFromGallery } = useCamera();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
@@ -66,6 +68,87 @@ export default function ClientDashboard() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Convert base64 to File object for native camera results
+  const base64ToFile = (base64: string, fileName: string, mimeType: string): File => {
+    const byteCharacters = atob(base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    return new File([blob], fileName, { type: mimeType });
+  };
+
+  // Handle native camera capture
+  const handleNativeCamera = async () => {
+    try {
+      const image = await takePhoto();
+      if (image?.base64String) {
+        const fileName = `photo_${Date.now()}.${image.format || 'jpeg'}`;
+        const mimeType = `image/${image.format || 'jpeg'}`;
+        const file = base64ToFile(image.base64String, fileName, mimeType);
+        
+        setSelectedFiles((prev) => [...prev, file]);
+        setPreviews((prev) => [...prev, `data:${mimeType};base64,${image.base64String}`]);
+        
+        toast({
+          title: "Photo captured",
+          description: "Your photo is ready to upload",
+        });
+      }
+    } catch (error: any) {
+      if (error.message !== 'User cancelled photos app') {
+        toast({
+          title: "Camera error",
+          description: error.message || "Failed to capture photo",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Handle native gallery picker
+  const handleNativeGallery = async () => {
+    try {
+      const image = await pickFromGallery();
+      if (image?.base64String) {
+        const fileName = `image_${Date.now()}.${image.format || 'jpeg'}`;
+        const mimeType = `image/${image.format || 'jpeg'}`;
+        const file = base64ToFile(image.base64String, fileName, mimeType);
+        
+        setSelectedFiles((prev) => [...prev, file]);
+        setPreviews((prev) => [...prev, `data:${mimeType};base64,${image.base64String}`]);
+      }
+    } catch (error: any) {
+      if (error.message !== 'User cancelled photos app') {
+        toast({
+          title: "Gallery error",
+          description: error.message || "Failed to select image",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  // Handle camera button click - use native or web fallback
+  const handleCameraClick = () => {
+    if (isNative) {
+      handleNativeCamera();
+    } else {
+      cameraInputRef.current?.click();
+    }
+  };
+
+  // Handle gallery button click - use native or web fallback
+  const handleGalleryClick = () => {
+    if (isNative) {
+      handleNativeGallery();
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -422,22 +505,22 @@ export default function ClientDashboard() {
             {/* Upload Options */}
             <div className="grid grid-cols-3 gap-3">
               <button
-                onClick={() => cameraInputRef.current?.click()}
-                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all"
+                onClick={handleCameraClick}
+                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all active:scale-95"
               >
                 <Camera className="w-8 h-8 text-accent" />
                 <span className="text-sm font-medium text-foreground">Camera</span>
               </button>
               <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all"
+                onClick={handleGalleryClick}
+                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all active:scale-95"
               >
                 <Image className="w-8 h-8 text-accent" />
                 <span className="text-sm font-medium text-foreground">Gallery</span>
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all"
+                className="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all active:scale-95"
               >
                 <File className="w-8 h-8 text-accent" />
                 <span className="text-sm font-medium text-foreground">Files</span>
