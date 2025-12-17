@@ -21,6 +21,8 @@ import {
   RotateCcw,
   X,
   Loader2,
+  User,
+  History,
 } from "lucide-react";
 import {
   Dialog,
@@ -28,11 +30,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import ClientProfileSettings from "./ClientProfileSettings";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
   { icon: FileText, label: "My Documents", href: "/dashboard/documents" },
-  { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
+  { icon: History, label: "History", href: "/dashboard/history" },
+  { icon: User, label: "Profile", href: "/dashboard/profile" },
 ];
 
 type DocumentStatus = "pending" | "posted" | "clarification_needed" | "resend_requested";
@@ -66,6 +71,7 @@ export default function ClientDashboard() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -350,7 +356,24 @@ export default function ClientDashboard() {
 
   return (
     <DashboardLayout navItems={navItems} title="Client">
-      <div className="space-y-8 animate-fade-in">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="overview" className="flex items-center gap-2">
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2">
+            <History className="w-4 h-4" />
+            <span className="hidden sm:inline">History</span>
+          </TabsTrigger>
+          <TabsTrigger value="profile" className="flex items-center gap-2">
+            <User className="w-4 h-4" />
+            <span className="hidden sm:inline">Profile</span>
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview">
+          <div className="space-y-8 animate-fade-in">
         {/* Upload CTA */}
         <Card className="shadow-lg border-accent/20 bg-gradient-to-br from-accent/5 to-transparent">
           <CardContent className="p-6">
@@ -494,6 +517,63 @@ export default function ClientDashboard() {
           </CardContent>
         </Card>
       </div>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <div className="space-y-6 animate-fade-in">
+            <Card className="shadow-md border-border/50">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <History className="w-5 h-5 text-accent" />
+                  Upload History
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {documents.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No upload history yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {documents.map((doc) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">{doc.file_name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Uploaded: {new Date(doc.uploaded_at).toLocaleString()}
+                            </p>
+                            {doc.notes && (
+                              <p className="text-sm text-accent mt-1">Note: {doc.notes}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {getStatusBadge(doc.status)}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {doc.file_type?.includes("pdf") ? "PDF" : "Image"}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="profile">
+          <ClientProfileSettings />
+        </TabsContent>
+      </Tabs>
 
       {/* Upload Dialog */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
