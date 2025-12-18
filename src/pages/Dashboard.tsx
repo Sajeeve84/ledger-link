@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/contexts/AuthContext";
 import FirmDashboard from "@/components/dashboard/FirmDashboard";
 import AccountantDashboard from "@/components/dashboard/AccountantDashboard";
@@ -9,12 +10,13 @@ import { Loader2 } from "lucide-react";
 export default function Dashboard() {
   const { user, userRole, loading } = useAuth();
   const navigate = useNavigate();
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate("/auth");
+      navigate(isNative ? "/auth?app=client" : "/auth");
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, isNative]);
 
   if (loading) {
     return (
