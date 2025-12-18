@@ -300,6 +300,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_firm_accountant: {
+        Args: { _firm_id: string; _user_id: string }
+        Returns: boolean
+      }
+      is_firm_owner: {
+        Args: { _firm_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "firm" | "accountant" | "client"
