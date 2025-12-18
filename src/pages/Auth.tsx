@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,9 @@ export default function Auth() {
   const { signIn, signUp, user } = useAuth();
   const { toast } = useToast();
 
-  const [isSignUp, setIsSignUp] = useState(searchParams.get("mode") === "signup");
+  const isClientApp = Capacitor.isNativePlatform() || searchParams.get("app") === "client";
+
+  const [isSignUp, setIsSignUp] = useState(!isClientApp && searchParams.get("mode") === "signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -57,9 +60,9 @@ export default function Auth() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validate()) return;
-    
+
     setLoading(true);
 
     try {
@@ -104,10 +107,12 @@ export default function Auth() {
     <div className="min-h-screen bg-background flex">
       {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 gradient-primary p-12 flex-col justify-between">
-        <Link to="/" className="flex items-center gap-2 text-primary-foreground hover:opacity-80 transition-opacity">
-          <ArrowLeft className="w-5 h-5" />
-          <span>Back to Home</span>
-        </Link>
+        {!isClientApp && (
+          <Link to="/" className="flex items-center gap-2 text-primary-foreground hover:opacity-80 transition-opacity">
+            <ArrowLeft className="w-5 h-5" />
+            <span>Back to Home</span>
+          </Link>
+        )}
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
@@ -116,39 +121,58 @@ export default function Auth() {
             <span className="text-3xl font-bold text-primary-foreground">DocuFlow</span>
           </div>
           <h1 className="text-4xl font-bold text-primary-foreground leading-tight">
-            Simplify Your
-            <br />
-            Document Management
+            {isClientApp ? (
+              <>
+                Upload & Track
+                <br />
+                Your Documents
+              </>
+            ) : (
+              <>
+                Simplify Your
+                <br />
+                Document Management
+              </>
+            )}
           </h1>
           <p className="text-primary-foreground/80 text-lg max-w-md">
-            Connect your accounting firm with clients through a seamless, secure document workflow.
+            {isClientApp
+              ? "Sign in to upload photos or PDFs and track their status."
+              : "Connect your accounting firm with clients through a seamless, secure document workflow."}
           </p>
+          {isClientApp && (
+            <p className="text-primary-foreground/70 text-sm max-w-md">
+              New here? Use the invitation link your accounting firm emailed you to create your account.
+            </p>
+          )}
         </div>
-        <p className="text-primary-foreground/60 text-sm">
-          © 2024 DocuFlow. Secure document management.
-        </p>
+        <p className="text-primary-foreground/60 text-sm">© 2024 DocuFlow. Secure document management.</p>
       </div>
 
       {/* Right Side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 animate-fade-in">
-          <div className="lg:hidden mb-8">
-            <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-              <span>Back</span>
-            </Link>
-          </div>
+          {!isClientApp && (
+            <div className="lg:hidden mb-8">
+              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </Link>
+            </div>
+          )}
 
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">
-              {isSignUp ? "Register Your Firm" : "Welcome back"}
+              {isClientApp ? "Client Sign In" : isSignUp ? "Register Your Firm" : "Welcome back"}
             </h2>
             <p className="text-muted-foreground mt-2">
-              {isSignUp
-                ? "Create your accounting firm account"
-                : "Sign in to access your dashboard"}
+              {isClientApp
+                ? "Sign in to upload documents and see processing status."
+                : isSignUp
+                  ? "Create your accounting firm account"
+                  : "Sign in to access your dashboard"}
             </p>
-            {isSignUp && (
+            {isSignUp && !isClientApp && (
               <p className="text-sm text-muted-foreground mt-1">
                 Accountants and clients are invited by firm administrators.
               </p>
@@ -156,7 +180,7 @@ export default function Auth() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {isSignUp && (
+            {isSignUp && !isClientApp && (
               <>
                 {/* Firm indicator */}
                 <div className="p-4 rounded-lg border-2 border-accent bg-accent/5">
@@ -235,16 +259,22 @@ export default function Auth() {
             </Button>
           </form>
 
-          <p className="text-center text-muted-foreground">
-            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-accent hover:underline font-medium"
-            >
-              {isSignUp ? "Sign in" : "Register your firm"}
-            </button>
-          </p>
+          {isClientApp ? (
+            <p className="text-center text-muted-foreground text-sm">
+              Invited by your accounting firm? Open the invitation link from your email to create your account.
+            </p>
+          ) : (
+            <p className="text-center text-muted-foreground">
+              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-accent hover:underline font-medium"
+              >
+                {isSignUp ? "Sign in" : "Register your firm"}
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>
