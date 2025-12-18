@@ -103,16 +103,96 @@ export default function Auth() {
     }
   };
 
+  // Mobile-only client sign-in
+  if (isClientApp) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col safe-area-top safe-area-bottom">
+        {/* Header */}
+        <div className="gradient-primary px-6 pt-12 pb-16 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="w-10 h-10 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
+              <FileUp className="w-6 h-6 text-primary-foreground" />
+            </div>
+            <span className="text-2xl font-bold text-primary-foreground">DocuFlow</span>
+          </div>
+          <h1 className="text-xl font-semibold text-primary-foreground">Client Sign In</h1>
+          <p className="text-primary-foreground/80 text-sm mt-1">
+            Upload documents & track status
+          </p>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 px-6 -mt-8">
+          <div className="bg-card rounded-2xl shadow-lg p-6 space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-foreground">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 h-12"
+                  />
+                </div>
+                {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-foreground">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 h-12"
+                  />
+                </div>
+                {errors.password && <p className="text-sm text-destructive">{errors.password}</p>}
+              </div>
+
+              <Button
+                type="submit"
+                variant="hero"
+                size="lg"
+                className="w-full h-12"
+                disabled={loading}
+              >
+                {loading ? "Signing in..." : "Sign In"}
+              </Button>
+            </form>
+
+            <div className="pt-4 border-t border-border">
+              <p className="text-center text-muted-foreground text-sm">
+                New here? Check your email for an invitation link from your accounting firm.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 text-center">
+          <p className="text-muted-foreground/60 text-xs">© 2024 DocuFlow</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Web app auth (firms/accountants)
   return (
     <div className="min-h-screen bg-background flex">
       {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:w-1/2 gradient-primary p-12 flex-col justify-between">
-        {!isClientApp && (
-          <Link to="/" className="flex items-center gap-2 text-primary-foreground hover:opacity-80 transition-opacity">
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back to Home</span>
-          </Link>
-        )}
+        <Link to="/" className="flex items-center gap-2 text-primary-foreground hover:opacity-80 transition-opacity">
+          <ArrowLeft className="w-5 h-5" />
+          <span>Back to Home</span>
+        </Link>
         <div className="space-y-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-xl bg-primary-foreground/20 flex items-center justify-center">
@@ -121,30 +201,13 @@ export default function Auth() {
             <span className="text-3xl font-bold text-primary-foreground">DocuFlow</span>
           </div>
           <h1 className="text-4xl font-bold text-primary-foreground leading-tight">
-            {isClientApp ? (
-              <>
-                Upload & Track
-                <br />
-                Your Documents
-              </>
-            ) : (
-              <>
-                Simplify Your
-                <br />
-                Document Management
-              </>
-            )}
+            Simplify Your
+            <br />
+            Document Management
           </h1>
           <p className="text-primary-foreground/80 text-lg max-w-md">
-            {isClientApp
-              ? "Sign in to upload photos or PDFs and track their status."
-              : "Connect your accounting firm with clients through a seamless, secure document workflow."}
+            Connect your accounting firm with clients through a seamless, secure document workflow.
           </p>
-          {isClientApp && (
-            <p className="text-primary-foreground/70 text-sm max-w-md">
-              New here? Use the invitation link your accounting firm emailed you to create your account.
-            </p>
-          )}
         </div>
         <p className="text-primary-foreground/60 text-sm">© 2024 DocuFlow. Secure document management.</p>
       </div>
@@ -152,27 +215,21 @@ export default function Auth() {
       {/* Right Side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md space-y-8 animate-fade-in">
-          {!isClientApp && (
-            <div className="lg:hidden mb-8">
-              <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back</span>
-              </Link>
-            </div>
-          )}
+          <div className="lg:hidden mb-8">
+            <Link to="/" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back</span>
+            </Link>
+          </div>
 
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">
-              {isClientApp ? "Client Sign In" : isSignUp ? "Register Your Firm" : "Welcome back"}
+              {isSignUp ? "Register Your Firm" : "Welcome back"}
             </h2>
             <p className="text-muted-foreground mt-2">
-              {isClientApp
-                ? "Sign in to upload documents and see processing status."
-                : isSignUp
-                  ? "Create your accounting firm account"
-                  : "Sign in to access your dashboard"}
+              {isSignUp ? "Create your accounting firm account" : "Sign in to access your dashboard"}
             </p>
-            {isSignUp && !isClientApp && (
+            {isSignUp && (
               <p className="text-sm text-muted-foreground mt-1">
                 Accountants and clients are invited by firm administrators.
               </p>
@@ -180,9 +237,8 @@ export default function Auth() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {isSignUp && !isClientApp && (
+            {isSignUp && (
               <>
-                {/* Firm indicator */}
                 <div className="p-4 rounded-lg border-2 border-accent bg-accent/5">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-accent text-accent-foreground flex items-center justify-center">
@@ -195,7 +251,6 @@ export default function Auth() {
                   </div>
                 </div>
 
-                {/* Full Name */}
                 <div className="space-y-2">
                   <Label htmlFor="fullName" className="text-foreground">Full Name</Label>
                   <div className="relative">
@@ -214,7 +269,6 @@ export default function Auth() {
               </>
             )}
 
-            {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <div className="relative">
@@ -231,7 +285,6 @@ export default function Auth() {
               {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
             </div>
 
-            {/* Password */}
             <div className="space-y-2">
               <Label htmlFor="password" className="text-foreground">Password</Label>
               <div className="relative">
@@ -259,22 +312,16 @@ export default function Auth() {
             </Button>
           </form>
 
-          {isClientApp ? (
-            <p className="text-center text-muted-foreground text-sm">
-              Invited by your accounting firm? Open the invitation link from your email to create your account.
-            </p>
-          ) : (
-            <p className="text-center text-muted-foreground">
-              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-              <button
-                type="button"
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-accent hover:underline font-medium"
-              >
-                {isSignUp ? "Sign in" : "Register your firm"}
-              </button>
-            </p>
-          )}
+          <p className="text-center text-muted-foreground">
+            {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-accent hover:underline font-medium"
+            >
+              {isSignUp ? "Sign in" : "Register your firm"}
+            </button>
+          </p>
         </div>
       </div>
     </div>
