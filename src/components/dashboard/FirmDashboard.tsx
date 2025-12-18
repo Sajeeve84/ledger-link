@@ -284,14 +284,14 @@ export default function FirmDashboard() {
         <div className="flex flex-wrap gap-3">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="accent">
+              <Button variant="accent" onClick={() => setInviteType("client")}>
                 <UserPlus className="w-4 h-4 mr-2" />
-                Add Team Member
+                Add Client
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Invite Team Member</DialogTitle>
+                <DialogTitle>Invite {inviteType === "client" ? "Client" : "Accountant"}</DialogTitle>
               </DialogHeader>
               <form onSubmit={handleInvite} className="space-y-4 mt-4">
                 <div className="space-y-2">
@@ -304,8 +304,8 @@ export default function FirmDashboard() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="accountant">Accountant</SelectItem>
                       <SelectItem value="client">Client</SelectItem>
+                      <SelectItem value="accountant">Accountant</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -319,11 +319,16 @@ export default function FirmDashboard() {
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Sending..." : "Send Invitation"}
+                  {loading ? "Creating invite..." : "Generate Invite Link"}
                 </Button>
               </form>
             </DialogContent>
           </Dialog>
+          
+          <Button variant="outline" onClick={() => { setInviteType("accountant"); setDialogOpen(true); }}>
+            <Building className="w-4 h-4 mr-2" />
+            Add Accountant
+          </Button>
         </div>
 
         {/* Clients Table */}
