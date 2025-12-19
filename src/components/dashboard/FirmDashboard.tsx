@@ -46,6 +46,12 @@ interface Accountant {
   profiles: { full_name: string | null; email: string } | null;
 }
 
+interface Profile {
+  id: string;
+  full_name: string | null;
+  email: string;
+}
+
 export default function FirmDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -83,58 +89,83 @@ export default function FirmDashboard() {
     if (firm) {
       setFirmId(firm.id);
 
-      // Fetch clients
+      // Fetch clients (without join)
       const { data: clientsData } = await supabase
         .from("clients")
-        .select(`
-          id,
-          user_id,
-          company_name,
-          assigned_accountant_id,
-          profiles:user_id (full_name, email)
-        `)
+        .select("id, user_id, company_name, assigned_accountant_id")
         .eq("firm_id", firm.id);
 
-      if (clientsData) {
-        setClients(clientsData as unknown as Client[]);
-      }
-
-      // Fetch accountants
+      // Fetch accountants (without join)
       const { data: accountantsData } = await supabase
         .from("firm_accountants")
-        .select(`
-          id,
-          accountant_id,
-          profiles:accountant_id (full_name, email)
-        `)
+        .select("id, accountant_id")
         .eq("firm_id", firm.id);
 
-      if (accountantsData) {
-        setAccountants(accountantsData as unknown as Accountant[]);
+      // Get all user IDs to fetch profiles
+      const userIds = [
+        ...(clientsData?.map((c) => c.user_id) || []),
+        ...(accountantsData?.map((a) => a.accountant_id) || []),
+      ];
+
+      // Fetch profiles for all users
+      let profilesMap: Record<string, Profile> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", userIds);
+
+        if (profilesData) {
+          profilesData.forEach((p) => {
+            profilesMap[p.id] = p;
+          });
+        }
       }
 
-      // Count pending documents
-      const { count: pendingCount } = await supabase
-        .from("documents")
-        .select("*", { count: "exact", head: true })
-        .in("client_id", clientsData?.map((c) => c.id) || [])
-        .eq("status", "pending");
+      // Merge clients with profiles
+      const clientsWithProfiles: Client[] = (clientsData || []).map((c) => ({
+        ...c,
+        profiles: profilesMap[c.user_id] || null,
+      }));
+      setClients(clientsWithProfiles);
 
-      // Count processed today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const { count: processedCount } = await supabase
-        .from("documents")
-        .select("*", { count: "exact", head: true })
-        .in("client_id", clientsData?.map((c) => c.id) || [])
-        .eq("status", "posted")
-        .gte("updated_at", today.toISOString());
+      // Merge accountants with profiles
+      const accountantsWithProfiles: Accountant[] = (accountantsData || []).map((a) => ({
+        ...a,
+        profiles: profilesMap[a.accountant_id] || null,
+      }));
+      setAccountants(accountantsWithProfiles);
+
+      // Count pending documents
+      const clientIds = clientsData?.map((c) => c.id) || [];
+      let pendingCount = 0;
+      let processedCount = 0;
+
+      if (clientIds.length > 0) {
+        const { count: pending } = await supabase
+          .from("documents")
+          .select("*", { count: "exact", head: true })
+          .in("client_id", clientIds)
+          .eq("status", "pending");
+        pendingCount = pending || 0;
+
+        // Count processed today
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const { count: processed } = await supabase
+          .from("documents")
+          .select("*", { count: "exact", head: true })
+          .in("client_id", clientIds)
+          .eq("status", "posted")
+          .gte("updated_at", today.toISOString());
+        processedCount = processed || 0;
+      }
 
       setStats({
         totalClients: clientsData?.length || 0,
         totalAccountants: accountantsData?.length || 0,
-        pendingDocuments: pendingCount || 0,
-        processedToday: processedCount || 0,
+        pendingDocuments: pendingCount,
+        processedToday: processedCount,
       });
     }
   };
