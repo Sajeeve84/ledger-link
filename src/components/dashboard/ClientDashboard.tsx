@@ -222,6 +222,32 @@ export default function ClientDashboard() {
     setUploading(true);
 
     try {
+      // Get client info for notifications
+      const { data: clientInfo } = await supabase
+        .from("clients")
+        .select("assigned_accountant_id, firm_id")
+        .eq("id", clientId)
+        .single();
+
+      // Get firm owner ID
+      let firmOwnerId: string | null = null;
+      if (clientInfo?.firm_id) {
+        const { data: firmData } = await supabase
+          .from("firms")
+          .select("owner_id")
+          .eq("id", clientInfo.firm_id)
+          .single();
+        firmOwnerId = firmData?.owner_id || null;
+      }
+
+      // Get user profile for notification message
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user?.id)
+        .single();
+      const uploaderName = profile?.full_name || "A client";
+
       for (const file of selectedFiles) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${crypto.randomUUID()}.${fileExt}`;
@@ -230,15 +256,35 @@ export default function ClientDashboard() {
         const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
         if (uploadError) throw uploadError;
 
-        const { error: docError } = await supabase.from("documents").insert({
+        const { data: newDoc, error: docError } = await supabase.from("documents").insert({
           client_id: clientId,
           file_name: file.name,
           file_path: filePath,
           file_type: file.type,
           file_size: file.size,
           status: "pending",
-        });
+        }).select("id").single();
         if (docError) throw docError;
+
+        // Notify assigned accountant
+        if (clientInfo?.assigned_accountant_id) {
+          await supabase.from("notifications").insert({
+            user_id: clientInfo.assigned_accountant_id,
+            title: "New Document Uploaded",
+            message: `${uploaderName} uploaded "${file.name}" for review`,
+            document_id: newDoc?.id,
+          });
+        }
+
+        // Notify firm owner
+        if (firmOwnerId && firmOwnerId !== clientInfo?.assigned_accountant_id) {
+          await supabase.from("notifications").insert({
+            user_id: firmOwnerId,
+            title: "New Document Uploaded",
+            message: `${uploaderName} uploaded "${file.name}"`,
+            document_id: newDoc?.id,
+          });
+        }
       }
 
       toast({ title: "Uploaded!", description: `${selectedFiles.length} document(s) sent for review` });
