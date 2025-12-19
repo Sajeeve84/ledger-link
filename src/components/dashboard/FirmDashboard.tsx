@@ -1,39 +1,21 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "./DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import FirmOverviewPage from "./firm/FirmOverviewPage";
+import FirmClientsPage from "./firm/FirmClientsPage";
+import FirmAccountantsPage from "./firm/FirmAccountantsPage";
+import FirmDocumentsPage from "./firm/FirmDocumentsPage";
+import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
 import {
   LayoutDashboard,
   Users,
   FileText,
   Bell,
-  Plus,
-  UserPlus,
   Building,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertTriangle,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
@@ -67,6 +49,7 @@ interface Accountant {
 export default function FirmDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const location = useLocation();
   const [stats, setStats] = useState<Stats>({
     totalClients: 0,
     totalAccountants: 0,
@@ -137,11 +120,21 @@ export default function FirmDashboard() {
         .in("client_id", clientsData?.map((c) => c.id) || [])
         .eq("status", "pending");
 
+      // Count processed today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count: processedCount } = await supabase
+        .from("documents")
+        .select("*", { count: "exact", head: true })
+        .in("client_id", clientsData?.map((c) => c.id) || [])
+        .eq("status", "posted")
+        .gte("updated_at", today.toISOString());
+
       setStats({
         totalClients: clientsData?.length || 0,
         totalAccountants: accountantsData?.length || 0,
         pendingDocuments: pendingCount || 0,
-        processedToday: 0, // Would need proper query with date filter
+        processedToday: processedCount || 0,
       });
     }
   };
@@ -200,7 +193,7 @@ export default function FirmDashboard() {
   const assignAccountant = async (clientId: string, accountantId: string) => {
     const { error } = await supabase
       .from("clients")
-      .update({ assigned_accountant_id: accountantId })
+      .update({ assigned_accountant_id: accountantId || null })
       .eq("id", clientId);
 
     if (error) {
@@ -218,179 +211,64 @@ export default function FirmDashboard() {
     }
   };
 
+  // Calculate clients per accountant for accountants page
+  const clientsByAccountant: Record<string, number> = {};
+  clients.forEach((client) => {
+    if (client.assigned_accountant_id) {
+      clientsByAccountant[client.assigned_accountant_id] =
+        (clientsByAccountant[client.assigned_accountant_id] || 0) + 1;
+    }
+  });
+
+  // Determine which page to show based on route
+  const currentPath = location.pathname;
+
+  const renderContent = () => {
+    if (currentPath === "/dashboard/clients") {
+      return (
+        <FirmClientsPage
+          clients={clients}
+          accountants={accountants}
+          onAssignAccountant={assignAccountant}
+        />
+      );
+    }
+    if (currentPath === "/dashboard/accountants") {
+      return (
+        <FirmAccountantsPage
+          accountants={accountants}
+          clientsByAccountant={clientsByAccountant}
+        />
+      );
+    }
+    if (currentPath === "/dashboard/documents" && firmId) {
+      return <FirmDocumentsPage firmId={firmId} clients={clients} />;
+    }
+    if (currentPath === "/dashboard/notifications") {
+      return <FirmNotificationsPage />;
+    }
+    // Default: Overview
+    return (
+      <FirmOverviewPage
+        stats={stats}
+        clients={clients}
+        accountants={accountants}
+        inviteEmail={inviteEmail}
+        setInviteEmail={setInviteEmail}
+        inviteType={inviteType}
+        setInviteType={setInviteType}
+        dialogOpen={dialogOpen}
+        setDialogOpen={setDialogOpen}
+        onInvite={handleInvite}
+        loading={loading}
+        onAssignAccountant={assignAccountant}
+      />
+    );
+  };
+
   return (
     <DashboardLayout navItems={navItems} title="Firm">
-      <div className="space-y-8 animate-fade-in">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="shadow-md border-border/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Clients</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.totalClients}</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-accent/10 flex items-center justify-center">
-                  <Users className="w-6 h-6 text-accent" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md border-border/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Accountants</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.totalAccountants}</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <Building className="w-6 h-6 text-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md border-border/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Pending Documents</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.pendingDocuments}</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-warning/10 flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-warning" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-md border-border/50">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Processed Today</p>
-                  <p className="text-3xl font-bold text-foreground">{stats.processedToday}</p>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-success/10 flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6 text-success" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Actions */}
-        <div className="flex flex-wrap gap-3">
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="accent" onClick={() => setInviteType("client")}>
-                <UserPlus className="w-4 h-4 mr-2" />
-                Add Client
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite {inviteType === "client" ? "Client" : "Accountant"}</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleInvite} className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select
-                    value={inviteType}
-                    onValueChange={(v) => setInviteType(v as "accountant" | "client")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="client">Client</SelectItem>
-                      <SelectItem value="accountant">Accountant</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Email Address</Label>
-                  <Input
-                    type="email"
-                    placeholder="email@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Creating invite..." : "Generate Invite Link"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-          
-          <Button variant="outline" onClick={() => { setInviteType("accountant"); setDialogOpen(true); }}>
-            <Building className="w-4 h-4 mr-2" />
-            Add Accountant
-          </Button>
-        </div>
-
-        {/* Clients Table */}
-        <Card className="shadow-md border-border/50">
-          <CardHeader>
-            <CardTitle className="text-foreground">Clients</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {clients.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No clients yet. Invite your first client to get started.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {clients.map((client) => (
-                  <div
-                    key={client.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/50"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                        <span className="text-accent font-medium">
-                          {client.profiles?.full_name?.charAt(0) || client.profiles?.email?.charAt(0) || "?"}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">
-                          {client.profiles?.full_name || client.profiles?.email}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {client.company_name || "No company name"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <Select
-                        value={client.assigned_accountant_id || "unassigned"}
-                        onValueChange={(v) =>
-                          assignAccountant(client.id, v === "unassigned" ? "" : v)
-                        }
-                      >
-                        <SelectTrigger className="w-[200px]">
-                          <SelectValue placeholder="Assign accountant" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="unassigned">Unassigned</SelectItem>
-                          {accountants.map((acc) => (
-                            <SelectItem key={acc.accountant_id} value={acc.accountant_id}>
-                              {acc.profiles?.full_name || acc.profiles?.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {renderContent()}
     </DashboardLayout>
   );
 }
