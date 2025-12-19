@@ -396,7 +396,7 @@ export default function AccountantDashboard() {
                 Cancel
               </Button>
               <Button
-                variant={actionType === "posted" ? "success" : "default"}
+                variant={actionType === "posted" ? "accent" : "default"}
                 className="flex-1"
                 onClick={handleAction}
                 disabled={loading}
