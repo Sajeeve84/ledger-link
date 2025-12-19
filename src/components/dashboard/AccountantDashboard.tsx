@@ -16,6 +16,8 @@ import {
   RotateCcw,
   Eye,
   Download,
+  X,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -58,6 +60,9 @@ export default function AccountantDashboard() {
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<DocumentStatus>("posted");
   const [loading, setLoading] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -224,6 +229,55 @@ export default function AccountantDashboard() {
     setActionDialogOpen(true);
   };
 
+  const handlePreview = async (doc: Document) => {
+    setSelectedDoc(doc);
+    setPreviewLoading(true);
+    setPreviewDialogOpen(true);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("documents")
+        .createSignedUrl(doc.file_path, 3600);
+
+      if (error) throw error;
+      setPreviewUrl(data.signedUrl);
+    } catch (error: any) {
+      toast({
+        title: "Preview failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      setPreviewDialogOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleDownload = async (doc: Document) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("documents")
+        .download(doc.file_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.file_name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({
+        title: "Download failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const pendingDocs = documents.filter((d) => d.status === "pending");
   const processedDocs = documents.filter((d) => d.status !== "pending");
 
@@ -319,7 +373,24 @@ export default function AccountantDashboard() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => handlePreview(doc)}
+                        title="View document"
+                      >
+                        <Eye className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownload(doc)}
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openActionDialog(doc, "posted")}
+                        title="Mark as posted"
                       >
                         <CheckCircle className="w-4 h-4 text-success" />
                       </Button>
@@ -327,6 +398,7 @@ export default function AccountantDashboard() {
                         variant="ghost"
                         size="icon"
                         onClick={() => openActionDialog(doc, "clarification_needed")}
+                        title="Request clarification"
                       >
                         <AlertTriangle className="w-4 h-4 text-warning" />
                       </Button>
@@ -334,6 +406,7 @@ export default function AccountantDashboard() {
                         variant="ghost"
                         size="icon"
                         onClick={() => openActionDialog(doc, "resend_requested")}
+                        title="Request resend"
                       >
                         <RotateCcw className="w-4 h-4 text-destructive" />
                       </Button>
@@ -373,7 +446,25 @@ export default function AccountantDashboard() {
                         </p>
                       </div>
                     </div>
-                    {getStatusBadge(doc.status)}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handlePreview(doc)}
+                        title="View document"
+                      >
+                        <Eye className="w-4 h-4 text-primary" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDownload(doc)}
+                        title="Download"
+                      >
+                        <Download className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                      {getStatusBadge(doc.status)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -422,6 +513,62 @@ export default function AccountantDashboard() {
                 {loading ? "Updating..." : "Confirm"}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={previewDialogOpen} onOpenChange={(open) => {
+        setPreviewDialogOpen(open);
+        if (!open) {
+          setPreviewUrl(null);
+          setSelectedDoc(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between">
+              <span className="truncate pr-4">{selectedDoc?.file_name}</span>
+              <div className="flex items-center gap-2">
+                {selectedDoc && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownload(selectedDoc)}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download
+                  </Button>
+                )}
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4 flex items-center justify-center min-h-[400px] bg-muted/30 rounded-lg overflow-hidden">
+            {previewLoading ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading preview...</p>
+              </div>
+            ) : previewUrl ? (
+              selectedDoc?.file_type?.includes("pdf") ? (
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-[70vh] border-0"
+                  title="Document Preview"
+                />
+              ) : (
+                <img
+                  src={previewUrl}
+                  alt={selectedDoc?.file_name}
+                  className="max-w-full max-h-[70vh] object-contain"
+                />
+              )
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                <FileText className="w-12 h-12 opacity-50" />
+                <p>Unable to load preview</p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
