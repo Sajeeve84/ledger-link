@@ -69,36 +69,54 @@ export default function AccountantDashboard() {
   const fetchDocuments = async () => {
     if (!user) return;
 
-    const { data: clients } = await supabase
+    // First get clients assigned to this accountant
+    const { data: clientsData } = await supabase
       .from("clients")
-      .select("id")
+      .select("id, user_id, company_name")
       .eq("assigned_accountant_id", user.id);
 
-    if (clients && clients.length > 0) {
-      const clientIds = clients.map((c) => c.id);
-      
-      const { data } = await supabase
-        .from("documents")
-        .select(`
-          id,
-          file_name,
-          file_path,
-          file_type,
-          status,
-          notes,
-          uploaded_at,
-          clients:client_id (
-            id,
-            company_name,
-            profiles:user_id (full_name, email)
-          )
-        `)
-        .in("client_id", clientIds)
-        .order("uploaded_at", { ascending: false });
+    if (!clientsData || clientsData.length === 0) {
+      setDocuments([]);
+      return;
+    }
 
-      if (data) {
-        setDocuments(data as unknown as Document[]);
-      }
+    const clientIds = clientsData.map((c) => c.id);
+    const userIds = clientsData.map((c) => c.user_id);
+
+    // Fetch profiles for all clients
+    const { data: profilesData } = await supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", userIds);
+
+    const profilesMap: Record<string, { full_name: string | null; email: string }> = {};
+    profilesData?.forEach((p) => {
+      profilesMap[p.id] = { full_name: p.full_name, email: p.email };
+    });
+
+    // Build clients map with profiles
+    const clientsMap: Record<string, { id: string; company_name: string | null; profiles: { full_name: string | null; email: string } | null }> = {};
+    clientsData.forEach((c) => {
+      clientsMap[c.id] = {
+        id: c.id,
+        company_name: c.company_name,
+        profiles: profilesMap[c.user_id] || null,
+      };
+    });
+
+    // Fetch documents
+    const { data: docsData } = await supabase
+      .from("documents")
+      .select("id, file_name, file_path, file_type, status, notes, uploaded_at, client_id")
+      .in("client_id", clientIds)
+      .order("uploaded_at", { ascending: false });
+
+    if (docsData) {
+      const docsWithClients = docsData.map((doc) => ({
+        ...doc,
+        clients: clientsMap[doc.client_id] || null,
+      }));
+      setDocuments(docsWithClients as Document[]);
     }
   };
 
