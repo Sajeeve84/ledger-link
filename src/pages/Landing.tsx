@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FileUp, Shield, Users, Bell, CheckCircle, ArrowRight } from "lucide-react";
+import { FileUp, Shield, Users, Bell, CheckCircle, ArrowRight, Building } from "lucide-react";
 
 const features = [
   {
@@ -89,32 +89,73 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Hero Visual */}
+          {/* Hero Visual - Role Cards */}
           <div className="mt-16 relative animate-slide-up" style={{ animationDelay: "0.2s" }}>
-            <div className="aspect-video rounded-2xl bg-gradient-to-br from-primary/5 to-accent/5 border border-border/50 overflow-hidden shadow-lg">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="grid grid-cols-3 gap-4 p-8 w-full max-w-4xl">
-                  <div className="col-span-2 bg-card rounded-xl p-6 shadow-md border border-border/50">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <FileUp className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-foreground">Invoice_March_2024.pdf</p>
-                        <p className="text-sm text-muted-foreground">Uploaded 2 min ago</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="px-3 py-1 rounded-full bg-warning/10 text-warning text-xs font-medium">Pending Review</span>
-                    </div>
-                  </div>
-                  <div className="bg-card rounded-xl p-4 shadow-md border border-border/50">
-                    <div className="text-center">
-                      <p className="text-3xl font-bold text-accent">24</p>
-                      <p className="text-sm text-muted-foreground">Documents Today</p>
-                    </div>
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Firm Card */}
+              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border/50 hover:shadow-xl hover:border-primary/30 transition-all duration-300 group">
+                <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Building className="w-7 h-7 text-primary" />
                 </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">For Firms</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Manage all clients & accountants
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Track document workflows
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Generate invite links
+                  </li>
+                </ul>
+              </div>
+
+              {/* Accountant Card */}
+              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border/50 hover:shadow-xl hover:border-accent/30 transition-all duration-300 group">
+                <div className="w-14 h-14 rounded-xl bg-accent/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Users className="w-7 h-7 text-accent" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">For Accountants</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Review assigned client documents
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Update document status
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Request clarifications
+                  </li>
+                </ul>
+              </div>
+
+              {/* Client Card */}
+              <div className="bg-card rounded-2xl p-6 shadow-lg border border-border/50 hover:shadow-xl hover:border-success/30 transition-all duration-300 group">
+                <div className="w-14 h-14 rounded-xl bg-success/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <FileUp className="w-7 h-7 text-success" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">For Clients</h3>
+                <ul className="space-y-2 text-muted-foreground text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Upload documents easily
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Track processing status
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    Get real-time notifications
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
