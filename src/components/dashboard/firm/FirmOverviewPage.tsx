@@ -24,6 +24,7 @@ import {
   UserPlus,
   FileText,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface Stats {
   totalClients: number;
@@ -75,11 +76,16 @@ export default function FirmOverviewPage({
   loading,
   onAssignAccountant,
 }: FirmOverviewPageProps) {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-md border-border/50">
+        <Card 
+          className="shadow-md border-border/50 cursor-pointer hover:shadow-lg hover:border-accent/50 transition-all"
+          onClick={() => navigate("/dashboard/clients")}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -93,7 +99,10 @@ export default function FirmOverviewPage({
           </CardContent>
         </Card>
 
-        <Card className="shadow-md border-border/50">
+        <Card 
+          className="shadow-md border-border/50 cursor-pointer hover:shadow-lg hover:border-primary/50 transition-all"
+          onClick={() => navigate("/dashboard/accountants")}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -107,7 +116,10 @@ export default function FirmOverviewPage({
           </CardContent>
         </Card>
 
-        <Card className="shadow-md border-border/50">
+        <Card 
+          className="shadow-md border-border/50 cursor-pointer hover:shadow-lg hover:border-warning/50 transition-all"
+          onClick={() => navigate("/dashboard/documents")}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -121,7 +133,10 @@ export default function FirmOverviewPage({
           </CardContent>
         </Card>
 
-        <Card className="shadow-md border-border/50">
+        <Card 
+          className="shadow-md border-border/50 cursor-pointer hover:shadow-lg hover:border-success/50 transition-all"
+          onClick={() => navigate("/dashboard/documents")}
+        >
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
