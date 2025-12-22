@@ -202,22 +202,43 @@ export default function FirmDashboard() {
       // Generate secure invite link with token
       const inviteLink = `${window.location.origin}/invite?token=${tokenData.token}`;
       
-      // Try to copy to clipboard (may fail on localhost without HTTPS)
-      try {
-        await navigator.clipboard.writeText(inviteLink);
-        toast({
-          title: "Invite Link Copied!",
-          description: `Share this link with the ${inviteType}. Link expires in 48 hours.`,
-        });
-      } catch (clipboardErr) {
-        // Clipboard failed - show link in toast for manual copy
-        console.warn("Clipboard copy failed:", clipboardErr);
-        toast({
-          title: "Invite Link Generated",
-          description: inviteLink,
-          duration: 15000, // Show longer so user can copy manually
-        });
-      }
+      // Copy to clipboard with fallback for localhost
+      const copyToClipboard = async (text: string): Promise<boolean> => {
+        // Try modern API first
+        if (navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(text);
+            return true;
+          } catch {
+            // Fall through to fallback
+          }
+        }
+        
+        // Fallback for localhost/non-HTTPS
+        try {
+          const textarea = document.createElement('textarea');
+          textarea.value = text;
+          textarea.style.position = 'fixed';
+          textarea.style.opacity = '0';
+          document.body.appendChild(textarea);
+          textarea.select();
+          const success = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          return success;
+        } catch {
+          return false;
+        }
+      };
+
+      const copied = await copyToClipboard(inviteLink);
+      
+      toast({
+        title: copied ? "Copied!" : "Invite Link Generated",
+        description: copied 
+          ? `Share this link with the ${inviteType}. Link expires in 48 hours.`
+          : inviteLink,
+        duration: copied ? 3000 : 15000,
+      });
       
       setDialogOpen(false);
       setInviteEmail("");
