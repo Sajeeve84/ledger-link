@@ -11,33 +11,37 @@ export default function Dashboard() {
   const { user, userRole, loading } = useAuth();
   const navigate = useNavigate();
   const isNative = Capacitor.isNativePlatform();
+  const authPath = isNative ? "/auth?app=client" : "/auth";
+
   const [roleLoading, setRoleLoading] = useState(true);
 
   useEffect(() => {
     if (!loading && !user) {
-      navigate(isNative ? "/auth?app=client" : "/auth");
+      navigate(authPath, { replace: true });
     }
-  }, [user, loading, navigate, isNative]);
+  }, [user, loading, navigate, authPath]);
 
-  // Track role loading separately - give it time to fetch after auth loads
+  // Start role-loading window whenever we have an authenticated user.
   useEffect(() => {
     if (!loading && user) {
-      // Allow time for role to be fetched
-      const timeout = setTimeout(() => {
-        setRoleLoading(false);
-      }, 2000);
+      setRoleLoading(true);
+      const timeout = setTimeout(() => setRoleLoading(false), 2000);
       return () => clearTimeout(timeout);
-    } else if (!loading && !user) {
-      setRoleLoading(false);
     }
-  }, [loading, user, userRole]);
+    setRoleLoading(false);
+  }, [loading, user]);
 
-  // Reset role loading when userRole changes
+  // If role arrives, stop the role-loading state.
   useEffect(() => {
-    if (userRole) {
-      setRoleLoading(false);
-    }
+    if (userRole) setRoleLoading(false);
   }, [userRole]);
+
+  // If role never arrives, treat as unauthenticated/misconfigured and go back to auth.
+  useEffect(() => {
+    if (!loading && user && !roleLoading && !userRole) {
+      navigate(authPath, { replace: true });
+    }
+  }, [loading, user, roleLoading, userRole, navigate, authPath]);
 
   if (loading) {
     return (
@@ -52,7 +56,6 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  // Show loading while role is being fetched
   if (roleLoading && !userRole) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -72,8 +75,6 @@ export default function Dashboard() {
     case "client":
       return <ClientDashboard />;
     default:
-      // Role not found after loading - redirect to auth
-      navigate(isNative ? "/auth?app=client" : "/auth");
       return null;
   }
 }
