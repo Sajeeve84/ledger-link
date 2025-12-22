@@ -127,8 +127,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUserRole(null);
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      // If the backend session is already gone, still clear local state/storage.
+      if (error) {
+        // supabase-js supports signOut({ scope: 'local' }) in v2.
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        await supabase.auth.signOut({ scope: "local" });
+      }
+    } finally {
+      setSession(null);
+      setUser(null);
+      setUserRole(null);
+    }
   };
 
   return (
