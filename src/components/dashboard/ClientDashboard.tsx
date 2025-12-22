@@ -250,7 +250,8 @@ export default function ClientDashboard() {
 
       for (const file of selectedFiles) {
         const fileExt = file.name.split(".").pop();
-        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+        const fileName = `${uniqueId}.${fileExt}`;
         const filePath = `${user?.id}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
