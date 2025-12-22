@@ -190,9 +190,10 @@ export default function FirmDashboard() {
         .single();
 
       if (tokenError || !tokenData) {
+        console.error("Token creation error:", tokenError);
         toast({
           title: "Error",
-          description: "Failed to create invite token",
+          description: tokenError?.message || "Failed to create invite token",
           variant: "destructive",
         });
         return;
@@ -201,19 +202,30 @@ export default function FirmDashboard() {
       // Generate secure invite link with token
       const inviteLink = `${window.location.origin}/invite?token=${tokenData.token}`;
       
-      // Copy to clipboard
-      await navigator.clipboard.writeText(inviteLink);
+      // Try to copy to clipboard (may fail on localhost without HTTPS)
+      try {
+        await navigator.clipboard.writeText(inviteLink);
+        toast({
+          title: "Invite Link Copied!",
+          description: `Share this link with the ${inviteType}. Link expires in 48 hours.`,
+        });
+      } catch (clipboardErr) {
+        // Clipboard failed - show link in toast for manual copy
+        console.warn("Clipboard copy failed:", clipboardErr);
+        toast({
+          title: "Invite Link Generated",
+          description: inviteLink,
+          duration: 15000, // Show longer so user can copy manually
+        });
+      }
       
-      toast({
-        title: "Invite Link Copied!",
-        description: `Share this link with the ${inviteType}. Link expires in 48 hours.`,
-      });
       setDialogOpen(false);
       setInviteEmail("");
     } catch (err) {
+      console.error("Invite error:", err);
       toast({
         title: "Error",
-        description: "Failed to generate invite link",
+        description: err instanceof Error ? err.message : "Failed to generate invite link",
         variant: "destructive",
       });
     } finally {
