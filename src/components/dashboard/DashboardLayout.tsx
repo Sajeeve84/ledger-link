@@ -1,8 +1,10 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import NotificationPopover from "./NotificationPopover";
+import { useToast } from "@/hooks/use-toast";
 import {
   FileUp,
   LayoutDashboard,
@@ -14,7 +16,6 @@ import {
   Menu,
   X,
 } from "lucide-react";
-import { useState } from "react";
 
 interface NavItem {
   icon: typeof LayoutDashboard;
@@ -30,11 +31,19 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children, navItems, title }: DashboardLayoutProps) {
   const { user, signOut } = useAuth();
+  const { toast } = useToast();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
     await signOut();
+  };
+
+  const handleNewNotification = (notification: { title: string; message: string }) => {
+    toast({
+      title: notification.title,
+      description: notification.message,
+    });
   };
 
   return (
@@ -133,12 +142,7 @@ export default function DashboardLayout({ children, navItems, title }: Dashboard
           </button>
           <h1 className="text-lg font-semibold text-foreground">{title} Dashboard</h1>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive rounded-full text-[10px] text-destructive-foreground flex items-center justify-center">
-                3
-              </span>
-            </Button>
+            <NotificationPopover onNewNotification={handleNewNotification} />
           </div>
         </header>
 

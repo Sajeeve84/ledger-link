@@ -202,65 +202,113 @@ export default function FirmOverviewPage({
         </Button>
       </div>
 
-      {/* Recent Clients */}
-      <Card className="shadow-md border-border/50">
-        <CardHeader>
-          <CardTitle className="text-foreground">Recent Clients</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {clients.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No clients yet. Invite your first client to get started.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {clients.slice(0, 5).map((client) => (
-                <div
-                  key={client.id}
-                  className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/50"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
-                      <span className="text-accent font-medium">
-                        {client.profiles?.full_name?.charAt(0) || client.profiles?.email?.charAt(0) || "?"}
-                      </span>
+      {/* Recent Clients & Accountants */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Clients */}
+        <Card className="shadow-md border-border/50">
+          <CardHeader>
+            <CardTitle className="text-foreground">Recent Clients</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {clients.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No clients yet. Invite your first client to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {clients.slice(0, 5).map((client) => (
+                  <div
+                    key={client.id}
+                    className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/50"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                        <span className="text-accent font-medium">
+                          {client.profiles?.full_name?.charAt(0) || client.profiles?.email?.charAt(0) || "?"}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">
+                          {client.profiles?.full_name || client.profiles?.email}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {client.company_name || "No company name"}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {client.profiles?.full_name || client.profiles?.email}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {client.company_name || "No company name"}
-                      </p>
+                    <div className="hidden sm:flex items-center gap-4">
+                      <Select
+                        value={client.assigned_accountant_id || "unassigned"}
+                        onValueChange={(v) =>
+                          onAssignAccountant(client.id, v === "unassigned" ? "" : v)
+                        }
+                      >
+                        <SelectTrigger className="w-[160px]">
+                          <SelectValue placeholder="Assign" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="unassigned">Unassigned</SelectItem>
+                          {accountants.map((acc) => (
+                            <SelectItem key={acc.accountant_id} value={acc.accountant_id}>
+                              {acc.profiles?.full_name || acc.profiles?.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <Select
-                      value={client.assigned_accountant_id || "unassigned"}
-                      onValueChange={(v) =>
-                        onAssignAccountant(client.id, v === "unassigned" ? "" : v)
-                      }
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Accountants */}
+        <Card className="shadow-md border-border/50">
+          <CardHeader>
+            <CardTitle className="text-foreground">Recent Accountants</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {accountants.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Building className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No accountants yet. Invite your first accountant to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {accountants.slice(0, 5).map((acc) => {
+                  const clientCount = clients.filter(
+                    (c) => c.assigned_accountant_id === acc.accountant_id
+                  ).length;
+                  return (
+                    <div
+                      key={acc.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/50"
                     >
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue placeholder="Assign accountant" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unassigned">Unassigned</SelectItem>
-                        {accountants.map((acc) => (
-                          <SelectItem key={acc.accountant_id} value={acc.accountant_id}>
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-primary font-medium">
+                            {acc.profiles?.full_name?.charAt(0) || acc.profiles?.email?.charAt(0) || "?"}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">
                             {acc.profiles?.full_name || acc.profiles?.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {clientCount} client{clientCount !== 1 ? "s" : ""} assigned
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
