@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "./DashboardLayout";
 import FirmOverviewPage from "./firm/FirmOverviewPage";
@@ -9,7 +8,7 @@ import FirmAccountantsPage from "./firm/FirmAccountantsPage";
 import FirmDocumentsPage from "./firm/FirmDocumentsPage";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
-import { invitesApi } from "@/lib/api";
+import { invitesApi, firmsApi, clientsApi, accountantsApi, documentsApi } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -47,12 +46,6 @@ interface Accountant {
   profiles: { full_name: string | null; email: string } | null;
 }
 
-interface Profile {
-  id: string;
-  full_name: string | null;
-  email: string;
-}
-
 export default function FirmDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -80,100 +73,136 @@ export default function FirmDashboard() {
   const fetchFirmData = async () => {
     if (!user) return;
 
-    // Get firm
-    const { data: firm } = await supabase
-      .from("firms")
-      .select("id")
-      .eq("owner_id", user.id)
-      .maybeSingle();
+    // Get firm (for current firm owner)
+    const firmRes = await firmsApi.get();
 
-    if (firm) {
-      setFirmId(firm.id);
+    if (firmRes.error) {
+      console.error("Firm fetch error:", firmRes.error);
+      toast({
+        title: "Error",
+        description: firmRes.error,
+        variant: "destructive",
+      });
+      return;
+    }
 
-      // Fetch clients (without join)
-      const { data: clientsData } = await supabase
-        .from("clients")
-        .select("id, user_id, company_name, assigned_accountant_id")
-        .eq("firm_id", firm.id);
-
-      // Fetch accountants (without join)
-      const { data: accountantsData } = await supabase
-        .from("firm_accountants")
-        .select("id, accountant_id")
-        .eq("firm_id", firm.id);
-
-      // Get all user IDs to fetch profiles
-      const userIds = [
-        ...(clientsData?.map((c) => c.user_id) || []),
-        ...(accountantsData?.map((a) => a.accountant_id) || []),
-      ];
-
-      // Fetch profiles for all users
-      let profilesMap: Record<string, Profile> = {};
-      if (userIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", userIds);
-
-        if (profilesData) {
-          profilesData.forEach((p) => {
-            profilesMap[p.id] = p;
-          });
-        }
-      }
-
-      // Merge clients with profiles
-      const clientsWithProfiles: Client[] = (clientsData || []).map((c) => ({
-        ...c,
-        profiles: profilesMap[c.user_id] || null,
-      }));
-      setClients(clientsWithProfiles);
-
-      // Merge accountants with profiles
-      const accountantsWithProfiles: Accountant[] = (accountantsData || []).map((a) => ({
-        ...a,
-        profiles: profilesMap[a.accountant_id] || null,
-      }));
-      setAccountants(accountantsWithProfiles);
-
-      // Count pending documents
-      const clientIds = clientsData?.map((c) => c.id) || [];
-      let pendingCount = 0;
-      let processedCount = 0;
-
-      if (clientIds.length > 0) {
-        const { count: pending } = await supabase
-          .from("documents")
-          .select("*", { count: "exact", head: true })
-          .in("client_id", clientIds)
-          .eq("status", "pending");
-        pendingCount = pending || 0;
-
-        // Count processed today
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const { count: processed } = await supabase
-          .from("documents")
-          .select("*", { count: "exact", head: true })
-          .in("client_id", clientIds)
-          .eq("status", "posted")
-          .gte("updated_at", today.toISOString());
-        processedCount = processed || 0;
-      }
-
+    const firm = firmRes.data;
+    if (!firm?.id) {
+      setFirmId(null);
+      setClients([]);
+      setAccountants([]);
       setStats({
-        totalClients: clientsData?.length || 0,
-        totalAccountants: accountantsData?.length || 0,
-        pendingDocuments: pendingCount,
-        processedToday: processedCount,
+        totalClients: 0,
+        totalAccountants: 0,
+        pendingDocuments: 0,
+        processedToday: 0,
+      });
+      return;
+    }
+
+    setFirmId(firm.id);
+
+    const [clientsRes, accountantsRes, docsRes] = await Promise.all([
+      clientsApi.getByFirm(firm.id),
+      accountantsApi.getByFirm(firm.id),
+      documentsApi.getByFirm(firm.id),
+    ]);
+
+    if (clientsRes.error) {
+      toast({
+        title: "Error",
+        description: clientsRes.error,
+        variant: "destructive",
       });
     }
+
+    if (accountantsRes.error) {
+      toast({
+        title: "Error",
+        description: accountantsRes.error,
+        variant: "destructive",
+      });
+    }
+
+    const clientsWithProfiles: Client[] = (clientsRes.data || []).map((c: any) => ({
+      id: c.id,
+      user_id: c.user_id,
+      company_name: c.company_name ?? null,
+      assigned_accountant_id: c.assigned_accountant_id ?? null,
+      profiles: c.email
+        ? {
+            full_name: c.full_name ?? null,
+            email: c.email,
+          }
+        : null,
+    }));
+
+    const accountantsWithProfiles: Accountant[] = (accountantsRes.data || []).map((a: any) => ({
+      id: a.id,
+      accountant_id: a.accountant_id,
+      profiles: a.email
+        ? {
+            full_name: a.full_name ?? null,
+            email: a.email,
+          }
+        : null,
+    }));
+
+    setClients(clientsWithProfiles);
+    setAccountants(accountantsWithProfiles);
+
+    const docs = (docsRes.data || []) as any[];
+    const pendingCount = docs.filter((d) => d.status === "pending").length;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const processedCount = docs.filter((d) => {
+      if (d.status !== "posted") return false;
+      const updatedAt = d.updated_at ? new Date(d.updated_at) : null;
+      return !!updatedAt && updatedAt.getTime() >= today.getTime();
+    }).length;
+
+    setStats({
+      totalClients: clientsWithProfiles.length,
+      totalAccountants: accountantsWithProfiles.length,
+      pendingDocuments: pendingCount,
+      processedToday: processedCount,
+    });
   };
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firmId || !inviteEmail || !user) return;
+
+    if (!firmId) {
+      toast({
+        title: "Error",
+        description: "Firm not loaded yet. Please refresh and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const email = inviteEmail.trim();
+    if (!email) {
+      toast({
+        title: "Email required",
+        description: "Please enter an email address to generate an invite link.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!emailOk) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address (example: name@domain.com).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!user) return;
 
     setLoading(true);
 
@@ -181,7 +210,7 @@ export default function FirmDashboard() {
       // Create invite token via PHP API
       const response = await invitesApi.create({
         firm_id: firmId,
-        email: inviteEmail,
+        email,
         role: inviteType,
       });
 
@@ -198,13 +227,13 @@ export default function FirmDashboard() {
       // Generate invite link
       const baseUrl = window.location.origin;
       const inviteLink = `${baseUrl}/invite?token=${response.data.token}`;
-      
+
       // Copy link to clipboard
       try {
         await navigator.clipboard.writeText(inviteLink);
         toast({
           title: "Invite Link Created!",
-          description: `Link copied to clipboard. Share it with ${inviteEmail}. Expires in 48 hours.`,
+          description: `Link copied to clipboard. Share it with ${email}. Expires in 48 hours.`,
         });
       } catch {
         // Fallback: show the link
@@ -214,7 +243,7 @@ export default function FirmDashboard() {
           duration: 15000,
         });
       }
-      
+
       setDialogOpen(false);
       setInviteEmail("");
     } catch (err) {
@@ -230,10 +259,11 @@ export default function FirmDashboard() {
   };
 
   const assignAccountant = async (clientId: string, accountantId: string) => {
-    const { error } = await supabase
-      .from("clients")
-      .update({ assigned_accountant_id: accountantId || null })
-      .eq("id", clientId);
+    const desired = accountantId || "";
+
+    const { error } = await clientsApi.update(clientId, {
+      assigned_accountant_id: desired,
+    });
 
     if (error) {
       toast({
