@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { invitesApi, authApi, clientsApi, accountantsApi } from "@/lib/api";
+import { invitesApi, authApi, clientsApi, accountantsApi, notificationsApi } from "@/lib/api";
 import { FileUp, Mail, Lock, User, ArrowLeft, Users, Building, Loader2 } from "lucide-react";
 import { z } from "zod";
 
@@ -22,6 +22,8 @@ interface TokenData {
   role: InviteRole;
   expires_at: string;
   used_at: string | null;
+  firm_name?: string;
+  firm_owner_id?: string;
 }
 
 export default function Invite() {
@@ -173,6 +175,17 @@ export default function Invite() {
           title: "Warning",
           description: usedError,
           variant: "destructive",
+        });
+      }
+
+      // 5) Notify firm owner about the new join
+      if (tokenData.firm_owner_id) {
+        const roleLabel = tokenData.role === "accountant" ? "Accountant" : "Client";
+        const userName = fullName || email;
+        await notificationsApi.create({
+          user_id: tokenData.firm_owner_id,
+          title: `New ${roleLabel} Joined`,
+          message: `${userName} has joined your firm${tokenData.role === "client" && companyName ? ` (${companyName})` : ""}.`,
         });
       }
 

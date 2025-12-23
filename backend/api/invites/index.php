@@ -21,7 +21,7 @@ try {
             if ($token) {
                 // Public: validate token
                 $stmt = $db->prepare("
-                    SELECT it.*, f.name as firm_name
+                    SELECT it.*, f.name as firm_name, f.owner_id as firm_owner_id
                     FROM invite_tokens it
                     JOIN firms f ON it.firm_id = f.id
                     WHERE it.token = ? AND it.used_at IS NULL AND it.expires_at > NOW()
