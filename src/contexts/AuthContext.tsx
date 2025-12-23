@@ -1,8 +1,20 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { authApi } from "@/lib/api";
 
 type UserRole = "firm" | "accountant" | "client" | null;
+
+interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  phone?: string;
+  avatar_url?: string;
+}
+
+interface Session {
+  access_token: string;
+  expires_at: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -22,122 +34,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserRole = async (userId: string, retryCount = 0): Promise<void> => {
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .maybeSingle();
-    
-    if (data) {
-      setUserRole(data.role as UserRole);
-    } else if (retryCount < 3) {
-      // Retry after a short delay - role might not be inserted yet after signup
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return fetchUserRole(userId, retryCount + 1);
-    }
-  };
-
+  // Check for existing session on mount
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserRole(session.user.id);
-          }, 0);
-        } else {
-          setUserRole(null);
-        }
+    const checkSession = async () => {
+      const token = localStorage.getItem('access_token');
+      if (!token) {
         setLoading(false);
+        return;
       }
-    );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+      try {
+        const response = await authApi.getSession();
+        if (response.user) {
+          setUser(response.user);
+          setSession(response.session);
+          setUserRole(response.role as UserRole);
+        } else {
+          // Invalid session, clear storage
+          localStorage.removeItem('access_token');
+        }
+      } catch (error) {
+        console.error('Session check failed:', error);
+        localStorage.removeItem('access_token');
+      }
       
-      if (session?.user) {
-        fetchUserRole(session.user.id);
-      }
       setLoading(false);
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    checkSession();
   }, []);
 
   const signUp = async (email: string, password: string, fullName: string, role: "firm" | "accountant" | "client") => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-
-    if (error) return { error };
-
-    if (data.user && data.session) {
-      // User is confirmed and signed in - add role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({ user_id: data.user.id, role });
-
-      if (roleError) {
-        console.error("Role insert error:", roleError);
-        return { error: roleError };
+    try {
+      const response = await authApi.signUp(email, password, fullName, role);
+      
+      if (response.error) {
+        return { error: new Error(response.error) };
       }
 
-      // Set role immediately
-      setUserRole(role);
+      // Store token and set state
+      localStorage.setItem('access_token', response.session.access_token);
+      setUser(response.user);
+      setSession(response.session);
+      setUserRole(response.role as UserRole);
 
-      // If firm role, create a firm record
-      if (role === "firm") {
-        const { error: firmError } = await supabase.from("firms").insert({
-          name: `${fullName}'s Firm`,
-          owner_id: data.user.id,
-        });
-        
-        if (firmError) {
-          console.error("Firm insert error:", firmError);
-        }
-      }
-    } else if (data.user) {
-      // User created but email confirmation required
-      // This shouldn't happen with auto-confirm enabled
-      console.warn("User created but no session - email confirmation may be required");
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
     }
-
-    return { error: null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const response = await authApi.signIn(email, password);
+      
+      if (response.error) {
+        return { error: new Error(response.error) };
+      }
+
+      // Store token and set state
+      localStorage.setItem('access_token', response.session.access_token);
+      setUser(response.user);
+      setSession(response.session);
+      setUserRole(response.role as UserRole);
+
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signOut = async () => {
     try {
-      const { error } = await supabase.auth.signOut();
-
-      // If the backend session is already gone, still clear local state/storage.
-      if (error) {
-        // supabase-js supports signOut({ scope: 'local' }) in v2.
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        await supabase.auth.signOut({ scope: "local" });
-      }
+      await authApi.signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
     } finally {
+      localStorage.removeItem('access_token');
       setSession(null);
       setUser(null);
       setUserRole(null);
