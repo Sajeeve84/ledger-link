@@ -1,7 +1,7 @@
 // API Configuration for PHP Backend
 // Update this URL to match your XAMPP setup
 
-export const API_BASE_URL = 'http://localhost/docuflow-api/api';
+export const API_BASE_URL = 'http://ledger-link.developer.io/api';
 
 // Helper to get auth headers
 export const getAuthHeaders = (): HeadersInit => {
