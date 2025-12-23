@@ -9,6 +9,7 @@ import FirmAccountantsPage from "./firm/FirmAccountantsPage";
 import FirmDocumentsPage from "./firm/FirmDocumentsPage";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
+import { invitesApi } from "@/lib/api";
 import {
   LayoutDashboard,
   Users,
@@ -177,67 +178,40 @@ export default function FirmDashboard() {
     setLoading(true);
 
     try {
-      // Create secure invite token in database
-      const { data: tokenData, error: tokenError } = await supabase
-        .from("invite_tokens")
-        .insert({
-          firm_id: firmId,
-          email: inviteEmail,
-          role: inviteType,
-          created_by: user.id,
-        })
-        .select("token")
-        .single();
+      // Create invite token via PHP API
+      const response = await invitesApi.create({
+        firm_id: firmId,
+        email: inviteEmail,
+        role: inviteType,
+      });
 
-      if (tokenError || !tokenData) {
-        console.error("Token creation error:", tokenError);
+      if (response.error || !response.data) {
+        console.error("Token creation error:", response.error);
         toast({
           title: "Error",
-          description: tokenError?.message || "Failed to create invite token",
+          description: response.error || "Failed to create invite token",
           variant: "destructive",
         });
         return;
       }
 
-      // Generate secure invite link with token
-      // Use the current origin so it works on any hosting
+      // Generate invite link
       const baseUrl = window.location.origin;
-      const inviteLink = `${baseUrl}/invite?token=${tokenData.token}`;
+      const inviteLink = `${baseUrl}/invite?token=${response.data.token}`;
       
-      // Get firm name for email
-      const { data: firmData } = await supabase
-        .from("firms")
-        .select("name")
-        .eq("id", firmId)
-        .single();
-
-      // Send invite email via SMTP edge function
-      const { error: emailError } = await supabase.functions.invoke("send-invite-email", {
-        body: {
-          email: inviteEmail,
-          inviteLink,
-          inviteType,
-          firmName: firmData?.name,
-        },
-      });
-
-      if (emailError) {
-        console.error("Email send error:", emailError);
+      // Copy link to clipboard
+      try {
+        await navigator.clipboard.writeText(inviteLink);
         toast({
-          title: "Warning",
-          description: "Invite created but email failed to send. Please share the link manually.",
-          variant: "destructive",
+          title: "Invite Link Created!",
+          description: `Link copied to clipboard. Share it with ${inviteEmail}. Expires in 48 hours.`,
         });
-        // Still show the link as fallback
+      } catch {
+        // Fallback: show the link
         toast({
-          title: "Invite Link",
+          title: "Invite Link Created!",
           description: inviteLink,
           duration: 15000,
-        });
-      } else {
-        toast({
-          title: "Invitation Sent!",
-          description: `An invitation email has been sent to ${inviteEmail}. Link expires in 48 hours.`,
         });
       }
       
