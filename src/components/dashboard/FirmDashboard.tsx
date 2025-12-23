@@ -200,7 +200,9 @@ export default function FirmDashboard() {
       }
 
       // Generate secure invite link with token
-      const inviteLink = `${window.location.origin}/invite?token=${tokenData.token}`;
+      // Use the current origin so it works on any hosting
+      const baseUrl = window.location.origin;
+      const inviteLink = `${baseUrl}/invite?token=${tokenData.token}`;
       
       // Get firm name for email
       const { data: firmData } = await supabase
