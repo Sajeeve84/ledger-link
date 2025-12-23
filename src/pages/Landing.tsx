@@ -41,7 +41,7 @@ export default function Landing() {
             <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
               <FileUp className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="text-xl font-bold text-foreground">DocuFlow</span>
+            <span className="text-xl font-bold text-foreground">Douflow</span>
           </div>
           <nav className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -230,7 +230,7 @@ export default function Landing() {
             Ready to Streamline Your Workflow?
           </h2>
           <p className="text-primary-foreground/80 text-lg mb-8 max-w-2xl mx-auto">
-            Join hundreds of accounting firms who have simplified their document management with DocuFlow
+            Join hundreds of accounting firms who have simplified their document management with Douflow
           </p>
           <Link to="/auth?mode=signup">
             <Button variant="secondary" size="xl">
@@ -248,10 +248,10 @@ export default function Landing() {
             <div className="w-6 h-6 rounded gradient-primary flex items-center justify-center">
               <FileUp className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground">DocuFlow</span>
+            <span className="font-semibold text-foreground">Douflow</span>
           </div>
           <p className="text-sm text-muted-foreground">
-            © 2024 DocuFlow. All rights reserved.
+            © 2024 Douflow. All rights reserved.
           </p>
         </div>
       </footer>
