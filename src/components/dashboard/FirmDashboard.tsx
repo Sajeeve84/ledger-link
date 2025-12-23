@@ -9,6 +9,7 @@ import FirmDocumentsPage from "./firm/FirmDocumentsPage";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
 import { invitesApi, firmsApi, clientsApi, accountantsApi, documentsApi } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   Users,
@@ -59,11 +60,11 @@ export default function FirmDashboard() {
   const [clients, setClients] = useState<Client[]>([]);
   const [accountants, setAccountants] = useState<Accountant[]>([]);
   const [firmId, setFirmId] = useState<string | null>(null);
+  const [firmName, setFirmName] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteType, setInviteType] = useState<"accountant" | "client">("client");
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-
   useEffect(() => {
     if (user) {
       fetchFirmData();
@@ -89,6 +90,7 @@ export default function FirmDashboard() {
     const firm = firmRes.data;
     if (!firm?.id) {
       setFirmId(null);
+      setFirmName("");
       setClients([]);
       setAccountants([]);
       setStats({
@@ -101,6 +103,7 @@ export default function FirmDashboard() {
     }
 
     setFirmId(firm.id);
+    setFirmName(firm.name || "");
 
     const [clientsRes, accountantsRes, docsRes] = await Promise.all([
       clientsApi.getByFirm(firm.id),
@@ -228,19 +231,27 @@ export default function FirmDashboard() {
       const baseUrl = window.location.origin;
       const inviteLink = `${baseUrl}/invite?token=${response.data.token}`;
 
-      // Copy link to clipboard
-      try {
-        await navigator.clipboard.writeText(inviteLink);
+      // Send invite email via edge function
+      const { error: emailError } = await supabase.functions.invoke("send-invite-email", {
+        body: {
+          email,
+          inviteLink,
+          inviteType,
+          firmName: firmName || "our firm",
+        },
+      });
+
+      if (emailError) {
+        console.error("Email send error:", emailError);
         toast({
-          title: "Invite Link Created!",
-          description: `Link copied to clipboard. Share it with ${email}. Expires in 48 hours.`,
+          title: "Warning",
+          description: `Invite created but email failed to send: ${emailError.message}`,
+          variant: "destructive",
         });
-      } catch {
-        // Fallback: show the link
+      } else {
         toast({
-          title: "Invite Link Created!",
-          description: inviteLink,
-          duration: 15000,
+          title: "Invitation Sent!",
+          description: `An invitation email has been sent to ${email}.`,
         });
       }
 
