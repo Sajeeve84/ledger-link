@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { invitesApi, authApi, clientsApi, accountantsApi } from "@/lib/api";
 import { FileUp, Mail, Lock, User, ArrowLeft, Users, Building, Loader2 } from "lucide-react";
 import { z } from "zod";
 
@@ -27,6 +28,7 @@ export default function Invite() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { signUp } = useAuth();
 
   const tokenParam = searchParams.get("token");
 
@@ -49,43 +51,26 @@ export default function Invite() {
       }
 
       try {
-        const { data, error } = await supabase
-          .from("invite_tokens")
-          .select("token, firm_id, email, role, expires_at, used_at")
-          .eq("token", tokenParam)
-          .maybeSingle();
+        const res = await invitesApi.validate(tokenParam);
+        const invite = res?.data as TokenData | undefined;
 
-        if (error || !data) {
-          setErrorMessage("Invalid or expired invitation link");
+        if (!invite) {
+          setErrorMessage(res?.error || "Invalid or expired invitation link");
           setValidating(false);
           return;
         }
 
-        // Check if token is expired
-        if (new Date(data.expires_at) < new Date()) {
-          setErrorMessage("This invitation link has expired");
-          setValidating(false);
-          return;
-        }
-
-        // Check if token is already used
-        if (data.used_at) {
-          setErrorMessage("This invitation link has already been used");
-          setValidating(false);
-          return;
-        }
-
-        // Validate role
-        if (data.role !== "accountant" && data.role !== "client") {
+        // Defensive check (backend should already enforce this)
+        if (invite.role !== "accountant" && invite.role !== "client") {
           setErrorMessage("Invalid invitation type");
           setValidating(false);
           return;
         }
 
-        setTokenData(data as TokenData);
-        setEmail(data.email);
+        setTokenData(invite);
+        setEmail(invite.email);
         setValidating(false);
-      } catch (err) {
+      } catch {
         setErrorMessage("Failed to validate invitation");
         setValidating(false);
       }
@@ -118,26 +103,14 @@ export default function Invite() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validate() || !tokenData) return;
-    
+
     setLoading(true);
 
     try {
-      const redirectUrl = `${window.location.origin}/`;
-      
-      // Sign up the user
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: fullName,
-          },
-        },
-      });
-
+      // 1) Create account (stores token + updates auth state)
+      const { error } = await signUp(email, password, fullName, tokenData.role);
       if (error) {
         toast({
           title: "Sign up failed",
@@ -147,66 +120,67 @@ export default function Invite() {
         return;
       }
 
-      if (data.user) {
-        // Add user role from verified token (not from URL params)
-        const { error: roleError } = await supabase
-          .from("user_roles")
-          .insert({ user_id: data.user.id, role: tokenData.role });
+      // 2) Read back current user id from the backend session
+      const sessionRes = await authApi.getSession();
+      const userId: string | undefined = sessionRes?.user?.id;
 
-        if (roleError) {
+      if (!userId) {
+        toast({
+          title: "Error",
+          description: "Account created, but session could not be established.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // 3) Link user to firm based on invite role
+      if (tokenData.role === "accountant") {
+        const { error: linkError } = await accountantsApi.create({
+          firm_id: tokenData.firm_id,
+          accountant_id: userId,
+        });
+
+        if (linkError) {
           toast({
             title: "Error",
-            description: "Failed to set user role",
+            description: linkError,
             variant: "destructive",
           });
           return;
         }
-
-        // Link to firm based on role from verified token
-        if (tokenData.role === "accountant") {
-          const { error: linkError } = await supabase
-            .from("firm_accountants")
-            .insert({ firm_id: tokenData.firm_id, accountant_id: data.user.id });
-
-          if (linkError) {
-            toast({
-              title: "Error",
-              description: "Failed to link to firm",
-              variant: "destructive",
-            });
-            return;
-          }
-        } else if (tokenData.role === "client") {
-          const { error: linkError } = await supabase
-            .from("clients")
-            .insert({ 
-              firm_id: tokenData.firm_id, 
-              user_id: data.user.id,
-              company_name: companyName || null
-            });
-
-          if (linkError) {
-            toast({
-              title: "Error",
-              description: "Failed to link to firm",
-              variant: "destructive",
-            });
-            return;
-          }
-        }
-
-        // Mark token as used
-        await supabase
-          .from("invite_tokens")
-          .update({ used_at: new Date().toISOString() })
-          .eq("token", tokenData.token);
-
-        toast({
-          title: "Account created!",
-          description: "Welcome to DocuFlow. Redirecting to dashboard...",
+      } else {
+        const company = companyName.trim();
+        const { error: linkError } = await clientsApi.create({
+          firm_id: tokenData.firm_id,
+          user_id: userId,
+          ...(company ? { company_name: company } : {}),
         });
-        navigate("/dashboard");
+
+        if (linkError) {
+          toast({
+            title: "Error",
+            description: linkError,
+            variant: "destructive",
+          });
+          return;
+        }
       }
+
+      // 4) Mark invite token used
+      const { error: usedError } = await invitesApi.markUsed(tokenData.token);
+      if (usedError) {
+        toast({
+          title: "Warning",
+          description: usedError,
+          variant: "destructive",
+        });
+      }
+
+      toast({
+        title: "Account created!",
+        description: "Welcome to DocuFlow. Redirecting to dashboard...",
+      });
+      navigate("/dashboard");
     } finally {
       setLoading(false);
     }
