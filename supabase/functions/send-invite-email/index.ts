@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +12,119 @@ interface InviteEmailRequest {
   firmName?: string;
 }
 
+// Simple SMTP sender using Deno's built-in TCP
+async function sendEmail(
+  host: string,
+  port: number,
+  username: string,
+  password: string,
+  from: string,
+  to: string,
+  subject: string,
+  htmlContent: string
+): Promise<void> {
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  // Connect to SMTP server
+  let conn: Deno.Conn;
+  
+  if (port === 465) {
+    // Implicit TLS
+    conn = await Deno.connectTls({ hostname: host, port });
+  } else {
+    // Plain connection first, then STARTTLS
+    conn = await Deno.connect({ hostname: host, port });
+  }
+
+  const read = async (): Promise<string> => {
+    const buffer = new Uint8Array(1024);
+    const n = await conn.read(buffer);
+    if (n === null) throw new Error("Connection closed");
+    return decoder.decode(buffer.subarray(0, n));
+  };
+
+  const write = async (data: string): Promise<void> => {
+    await conn.write(encoder.encode(data + "\r\n"));
+  };
+
+  const sendCommand = async (cmd: string, expectedCode?: string): Promise<string> => {
+    await write(cmd);
+    const response = await read();
+    console.log(`SMTP: ${cmd.split(" ")[0]} -> ${response.trim()}`);
+    if (expectedCode && !response.startsWith(expectedCode)) {
+      throw new Error(`SMTP error: ${response}`);
+    }
+    return response;
+  };
+
+  try {
+    // Read greeting
+    const greeting = await read();
+    console.log(`SMTP Greeting: ${greeting.trim()}`);
+
+    // EHLO
+    await sendCommand(`EHLO localhost`, "250");
+
+    // STARTTLS for port 587
+    if (port === 587) {
+      await sendCommand("STARTTLS", "220");
+      conn = await Deno.startTls(conn as Deno.TcpConn, { hostname: host });
+      await sendCommand(`EHLO localhost`, "250");
+    }
+
+    // AUTH LOGIN
+    await sendCommand("AUTH LOGIN", "334");
+    await sendCommand(btoa(username), "334");
+    await sendCommand(btoa(password), "235");
+
+    // MAIL FROM
+    await sendCommand(`MAIL FROM:<${from}>`, "250");
+
+    // RCPT TO
+    await sendCommand(`RCPT TO:<${to}>`, "250");
+
+    // DATA
+    await sendCommand("DATA", "354");
+
+    // Build email with proper headers
+    const boundary = "----=_Part_" + Math.random().toString(36).substring(2);
+    const emailContent = [
+      `From: ${from}`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      ``,
+      `You've been invited! Please view this email in an HTML-capable client.`,
+      ``,
+      `--${boundary}`,
+      `Content-Type: text/html; charset=utf-8`,
+      ``,
+      htmlContent,
+      ``,
+      `--${boundary}--`,
+      `.`,
+    ].join("\r\n");
+
+    await write(emailContent);
+    const dataResponse = await read();
+    console.log(`SMTP DATA response: ${dataResponse.trim()}`);
+
+    // QUIT
+    await sendCommand("QUIT", "221");
+  } finally {
+    try {
+      conn.close();
+    } catch {
+      // Ignore close errors
+    }
+  }
+}
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -23,20 +135,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending invite email to ${email} for ${inviteType}`);
 
+    const smtpHost = Deno.env.get("SMTP_HOST") || "";
     const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587");
-    
-    const client = new SMTPClient({
-      connection: {
-        hostname: Deno.env.get("SMTP_HOST") || "",
-        port: smtpPort,
-        // Port 465 uses implicit TLS, port 587 uses STARTTLS
-        tls: smtpPort === 465,
-        auth: {
-          username: Deno.env.get("SMTP_USER") || "",
-          password: Deno.env.get("SMTP_PASS") || "",
-        },
-      },
-    });
+    const smtpUser = Deno.env.get("SMTP_USER") || "";
+    const smtpPass = Deno.env.get("SMTP_PASS") || "";
+    const smtpFrom = Deno.env.get("SMTP_FROM") || "";
+
+    if (!smtpHost || !smtpUser || !smtpPass || !smtpFrom) {
+      throw new Error("SMTP configuration is incomplete");
+    }
 
     const subject = inviteType === "accountant" 
       ? `You're invited to join ${firmName || "our firm"} as an Accountant`
@@ -84,15 +191,16 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
-    await client.send({
-      from: Deno.env.get("SMTP_FROM") || "",
-      to: email,
-      subject: subject,
-      content: "You've been invited! Please view this email in an HTML-capable client.",
-      html: htmlContent,
-    });
-
-    await client.close();
+    await sendEmail(
+      smtpHost,
+      smtpPort,
+      smtpUser,
+      smtpPass,
+      smtpFrom,
+      email,
+      subject,
+      htmlContent
+    );
 
     console.log(`Invite email sent successfully to ${email}`);
 
