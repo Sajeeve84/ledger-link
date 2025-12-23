@@ -23,11 +23,14 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Sending invite email to ${email} for ${inviteType}`);
 
+    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587");
+    
     const client = new SMTPClient({
       connection: {
         hostname: Deno.env.get("SMTP_HOST") || "",
-        port: parseInt(Deno.env.get("SMTP_PORT") || "587"),
-        tls: true,
+        port: smtpPort,
+        // Port 465 uses implicit TLS, port 587 uses STARTTLS
+        tls: smtpPort === 465,
         auth: {
           username: Deno.env.get("SMTP_USER") || "",
           password: Deno.env.get("SMTP_PASS") || "",
