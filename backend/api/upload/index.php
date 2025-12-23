@@ -39,7 +39,12 @@ if ($file['size'] > MAX_FILE_SIZE) {
     exit;
 }
 
-// Create upload directory if not exists
+// Create base upload directory if not exists
+if (!is_dir(UPLOAD_DIR)) {
+    mkdir(UPLOAD_DIR, 0755, true);
+}
+
+// Create dated subdirectory
 $uploadDir = UPLOAD_DIR . date('Y/m/');
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
