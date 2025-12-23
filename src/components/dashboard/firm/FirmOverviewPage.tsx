@@ -164,7 +164,7 @@ export default function FirmOverviewPage({
             <DialogHeader>
               <DialogTitle>Invite {inviteType === "client" ? "Client" : "Accountant"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={onInvite} className="space-y-4 mt-4">
+            <form onSubmit={onInvite} noValidate className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label>Type</Label>
                 <Select

@@ -76,9 +76,11 @@ try {
             $updates = [];
             $params = [];
             
-            if (isset($input['assigned_accountant_id'])) {
+            if (array_key_exists('assigned_accountant_id', $input)) {
                 $updates[] = "assigned_accountant_id = ?";
-                $params[] = $input['assigned_accountant_id'];
+                $value = $input['assigned_accountant_id'];
+                // Treat empty string as unassigned (NULL)
+                $params[] = ($value === '' ? null : $value);
             }
             if (isset($input['company_name'])) {
                 $updates[] = "company_name = ?";
