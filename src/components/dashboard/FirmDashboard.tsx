@@ -202,43 +202,42 @@ export default function FirmDashboard() {
       // Generate secure invite link with token
       const inviteLink = `${window.location.origin}/invite?token=${tokenData.token}`;
       
-      // Copy to clipboard with fallback for localhost
-      const copyToClipboard = async (text: string): Promise<boolean> => {
-        // Try modern API first
-        if (navigator.clipboard?.writeText) {
-          try {
-            await navigator.clipboard.writeText(text);
-            return true;
-          } catch {
-            // Fall through to fallback
-          }
-        }
-        
-        // Fallback for localhost/non-HTTPS
-        try {
-          const textarea = document.createElement('textarea');
-          textarea.value = text;
-          textarea.style.position = 'fixed';
-          textarea.style.opacity = '0';
-          document.body.appendChild(textarea);
-          textarea.select();
-          const success = document.execCommand('copy');
-          document.body.removeChild(textarea);
-          return success;
-        } catch {
-          return false;
-        }
-      };
+      // Get firm name for email
+      const { data: firmData } = await supabase
+        .from("firms")
+        .select("name")
+        .eq("id", firmId)
+        .single();
 
-      const copied = await copyToClipboard(inviteLink);
-      
-      toast({
-        title: copied ? "Copied!" : "Invite Link Generated",
-        description: copied 
-          ? `Share this link with the ${inviteType}. Link expires in 48 hours.`
-          : inviteLink,
-        duration: copied ? 3000 : 15000,
+      // Send invite email via SMTP edge function
+      const { error: emailError } = await supabase.functions.invoke("send-invite-email", {
+        body: {
+          email: inviteEmail,
+          inviteLink,
+          inviteType,
+          firmName: firmData?.name,
+        },
       });
+
+      if (emailError) {
+        console.error("Email send error:", emailError);
+        toast({
+          title: "Warning",
+          description: "Invite created but email failed to send. Please share the link manually.",
+          variant: "destructive",
+        });
+        // Still show the link as fallback
+        toast({
+          title: "Invite Link",
+          description: inviteLink,
+          duration: 15000,
+        });
+      } else {
+        toast({
+          title: "Invitation Sent!",
+          description: `An invitation email has been sent to ${inviteEmail}. Link expires in 48 hours.`,
+        });
+      }
       
       setDialogOpen(false);
       setInviteEmail("");
