@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "./DashboardLayout";
+import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,6 +55,7 @@ interface Document {
 
 export default function AccountantDashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const { toast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
@@ -280,6 +283,17 @@ export default function AccountantDashboard() {
 
   const pendingDocs = documents.filter((d) => d.status === "pending");
   const processedDocs = documents.filter((d) => d.status !== "pending");
+  
+  const currentPath = location.pathname;
+
+  // Show notifications page
+  if (currentPath === "/dashboard/notifications") {
+    return (
+      <DashboardLayout navItems={navItems} title="Accountant">
+        <FirmNotificationsPage />
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout navItems={navItems} title="Accountant">

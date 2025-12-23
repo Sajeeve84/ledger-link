@@ -26,6 +26,28 @@ export default function FirmNotificationsPage() {
   useEffect(() => {
     if (user) {
       fetchNotifications();
+      
+      // Subscribe to realtime notifications
+      const channel = supabase
+        .channel("firm-notifications")
+        .on(
+          "postgres_changes",
+          { 
+            event: "INSERT", 
+            schema: "public", 
+            table: "notifications",
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            const newNotif = payload.new as Notification;
+            setNotifications((prev) => [newNotif, ...prev]);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [user]);
 
