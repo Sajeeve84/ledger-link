@@ -206,10 +206,21 @@ export default function FirmDashboard() {
     }
 
     if (!user) return;
+    
+    if (!firmId) {
+      toast({
+        title: "Error",
+        description: "No firm found. Please refresh the page or contact support.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
 
     try {
+      console.log("Creating invite with firm_id:", firmId);
+      
       // Create invite token via PHP API
       const response = await invitesApi.create({
         firm_id: firmId,
