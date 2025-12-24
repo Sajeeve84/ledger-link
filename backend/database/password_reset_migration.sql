@@ -2,8 +2,9 @@
 -- Run this in phpMyAdmin or MySQL command line after the initial schema
 
 -- Create password reset tokens table
+-- Create password reset tokens table
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
-    id VARCHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
     user_id VARCHAR(36) NOT NULL,
     token VARCHAR(64) NOT NULL UNIQUE,
     expires_at TIMESTAMP NOT NULL,
