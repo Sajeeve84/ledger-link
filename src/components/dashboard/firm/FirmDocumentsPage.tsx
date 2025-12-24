@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/api";
 import {
   Select,
   SelectContent,
@@ -124,49 +124,50 @@ export default function FirmDocumentsPage({ firmId, clients }: FirmDocumentsPage
     return client?.profiles?.full_name || client?.company_name || client?.profiles?.email || "Unknown";
   };
 
-  const handlePreview = async (doc: Document) => {
+  const getFileUrl = useCallback((filePath: string) => {
+    if (!filePath) return "";
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+    const origin = API_BASE_URL.replace(/\/api\/?$/, "");
+    return `${origin}/${filePath.replace(/^\//, "")}`;
+  }, []);
+
+  const handlePreview = (doc: Document) => {
     setPreviewDoc(doc);
     setLoadingPreview(true);
 
-    try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .createSignedUrl(doc.file_path, 3600);
-
-      if (error) throw error;
-      setPreviewUrl(data.signedUrl);
-    } catch (error) {
+    const url = getFileUrl(doc.file_path);
+    if (!url) {
       toast({
         title: "Error",
-        description: "Failed to load document preview",
+        description: "Missing file path.",
         variant: "destructive",
       });
-    } finally {
       setLoadingPreview(false);
+      return;
     }
+
+    setPreviewUrl(url);
+    setLoadingPreview(false);
   };
 
-  const handleDownload = async (doc: Document) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .download(doc.file_path);
-
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.file_name;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
+  const handleDownload = (doc: Document) => {
+    const url = getFileUrl(doc.file_path);
+    if (!url) {
       toast({
         title: "Download failed",
-        description: "Could not download the document",
+        description: "Missing file path.",
         variant: "destructive",
       });
+      return;
     }
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = doc.file_name;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const formatFileSize = (bytes: number | null) => {
