@@ -75,6 +75,24 @@ export const authApi = {
     });
     return response.json();
   },
+
+  forgotPassword: async (email: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    return response.json();
+  },
+
+  resetPassword: async (token: string, password: string) => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password.php`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password }),
+    });
+    return response.json();
+  },
 };
 
 // Firms API

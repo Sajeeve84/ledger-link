@@ -9,6 +9,7 @@ import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Invite from "./pages/Invite";
 import Dashboard from "./pages/Dashboard";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +27,7 @@ const App = () => {
             <Routes>
               <Route path="/" element={isNative ? <Navigate to="/dashboard" replace /> : <Landing />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/invite" element={<Invite />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/dashboard/*" element={<Dashboard />} />
