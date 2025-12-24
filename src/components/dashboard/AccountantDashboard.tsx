@@ -193,12 +193,29 @@ export default function AccountantDashboard() {
         pending: "Document status updated",
       };
 
+      // Notify client
       await notificationsApi.create({
         user_id: selectedDoc.client_user_id,
         title: `Document ${actionType.replace("_", " ")}`,
         message: statusMessages[actionType],
         document_id: selectedDoc.id,
       });
+
+      // Notify firm owner about the status change
+      try {
+        const firmRes = await firmsApi.get();
+        if (firmRes.data?.owner_id) {
+          const clientName = selectedDoc.client_name || selectedDoc.company_name || "A client";
+          await notificationsApi.create({
+            user_id: firmRes.data.owner_id,
+            title: `Document Status Updated`,
+            message: `${user?.full_name || "Accountant"} marked "${selectedDoc.file_name}" from ${clientName} as ${actionType.replace("_", " ")}.`,
+            document_id: selectedDoc.id,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to notify firm owner:", err);
+      }
 
       toast({
         title: "Success",

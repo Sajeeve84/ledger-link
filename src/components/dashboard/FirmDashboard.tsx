@@ -8,7 +8,7 @@ import FirmAccountantsPage from "./firm/FirmAccountantsPage";
 import FirmDocumentsPage from "./firm/FirmDocumentsPage";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
-import { invitesApi, firmsApi, clientsApi, accountantsApi, documentsApi } from "@/lib/api";
+import { invitesApi, firmsApi, clientsApi, accountantsApi, documentsApi, notificationsApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
@@ -283,6 +283,10 @@ export default function FirmDashboard() {
   const assignAccountant = async (clientId: string, accountantId: string) => {
     const desired = accountantId || "";
 
+    // Find client info for notification
+    const client = clients.find(c => c.id === clientId);
+    const previousAccountantId = client?.assigned_accountant_id;
+
     const { error } = await clientsApi.update(clientId, {
       assigned_accountant_id: desired,
     });
@@ -294,6 +298,20 @@ export default function FirmDashboard() {
         variant: "destructive",
       });
     } else {
+      // Send notification to the newly assigned accountant
+      if (desired && desired !== previousAccountantId) {
+        const clientName = client?.profiles?.full_name || client?.company_name || "A client";
+        try {
+          await notificationsApi.create({
+            user_id: desired,
+            title: "New Client Assigned",
+            message: `${clientName} has been assigned to you for document review.`,
+          });
+        } catch (err) {
+          console.error("Failed to send notification to accountant:", err);
+        }
+      }
+
       toast({
         title: "Success",
         description: "Accountant assigned successfully",
