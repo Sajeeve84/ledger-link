@@ -1,9 +1,15 @@
 import { useEffect, useState, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCamera } from "@/hooks/useCamera";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import {
+  clientsApi,
+  documentsApi,
+  notificationsApi,
+  uploadFile,
+  API_BASE_URL,
+} from "@/lib/api";
 import {
   Home,
   FileText,
@@ -52,6 +58,12 @@ interface Notification {
   created_at: string;
 }
 
+interface ClientInfo {
+  id: string;
+  assigned_accountant_id: string | null;
+  firm_id: string;
+}
+
 type TabType = "home" | "history" | "notifications" | "profile";
 
 export default function ClientDashboard() {
@@ -60,7 +72,7 @@ export default function ClientDashboard() {
   const { isNative, takePhoto, pickFromGallery } = useCamera();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -68,6 +80,7 @@ export default function ClientDashboard() {
   const [activeTab, setActiveTab] = useState<TabType>("home");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
@@ -136,54 +149,53 @@ export default function ClientDashboard() {
   useEffect(() => {
     if (user) {
       fetchClientData();
-      const unsubscribe = subscribeToNotifications();
-      return () => unsubscribe?.();
+      fetchNotifications();
+      // Poll for notifications every 30 seconds
+      pollIntervalRef.current = setInterval(fetchNotifications, 30000);
     }
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [user]);
 
   const fetchClientData = async () => {
     if (!user) return;
 
-    const { data: client } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    try {
+      // Get client info from PHP API
+      const clientRes = await clientsApi.getOwn();
+      const clients = clientRes.data;
+      
+      if (clients && clients.length > 0) {
+        const client = clients[0];
+        setClientInfo({
+          id: client.id,
+          assigned_accountant_id: client.assigned_accountant_id,
+          firm_id: client.firm_id,
+        });
 
-    if (client) {
-      setClientId(client.id);
-      const { data: docs } = await supabase
-        .from("documents")
-        .select("*")
-        .eq("client_id", client.id)
-        .order("uploaded_at", { ascending: false });
-      if (docs) setDocuments(docs as Document[]);
+        // Get documents for this client
+        const docsRes = await documentsApi.getByClient(client.id);
+        if (docsRes.data) {
+          setDocuments(docsRes.data as Document[]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching client data:", error);
     }
-
-    const { data: notifs } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (notifs) setNotifications(notifs as Notification[]);
   };
 
-  const subscribeToNotifications = () => {
-    if (!user) return;
-    const channel = supabase
-      .channel("notifications-changes")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          const newNotif = payload.new as Notification;
-          setNotifications((prev) => [newNotif, ...prev]);
-          toast({ title: newNotif.title, description: newNotif.message });
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+  const fetchNotifications = async () => {
+    try {
+      const res = await notificationsApi.get();
+      if (res.data) {
+        setNotifications(res.data as Notification[]);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,72 +230,34 @@ export default function ClientDashboard() {
   };
 
   const handleUpload = async () => {
-    if (!clientId || selectedFiles.length === 0) return;
+    if (!clientInfo || selectedFiles.length === 0) {
+      toast({
+        title: "Error",
+        description: !clientInfo ? "Client information not found. Please refresh." : "No files selected.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setUploading(true);
 
     try {
-      // Get client info for notifications
-      const { data: clientInfo } = await supabase
-        .from("clients")
-        .select("assigned_accountant_id, firm_id")
-        .eq("id", clientId)
-        .single();
-
-      // Get firm owner ID
-      let firmOwnerId: string | null = null;
-      if (clientInfo?.firm_id) {
-        const { data: firmData } = await supabase
-          .from("firms")
-          .select("owner_id")
-          .eq("id", clientInfo.firm_id)
-          .single();
-        firmOwnerId = firmData?.owner_id || null;
-      }
-
-      // Get user profile for notification message
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user?.id)
-        .single();
-      const uploaderName = profile?.full_name || "A client";
-
       for (const file of selectedFiles) {
-        const fileExt = file.name.split(".").pop();
-        const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-        const fileName = `${uniqueId}.${fileExt}`;
-        const filePath = `${user?.id}/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage.from("documents").upload(filePath, file);
-        if (uploadError) throw uploadError;
-
-        const { data: newDoc, error: docError } = await supabase.from("documents").insert({
-          client_id: clientId,
-          file_name: file.name,
-          file_path: filePath,
-          file_type: file.type,
-          file_size: file.size,
-          status: "pending",
-        }).select("id").single();
-        if (docError) throw docError;
-
-        // Notify assigned accountant
-        if (clientInfo?.assigned_accountant_id) {
-          await supabase.from("notifications").insert({
-            user_id: clientInfo.assigned_accountant_id,
-            title: "New Document Uploaded",
-            message: `${uploaderName} uploaded "${file.name}" for review`,
-            document_id: newDoc?.id,
-          });
+        // Upload file to PHP backend
+        const uploadRes = await uploadFile(file, clientInfo.id);
+        
+        if (uploadRes.error) {
+          throw new Error(uploadRes.error);
         }
 
-        // Notify firm owner
-        if (firmOwnerId && firmOwnerId !== clientInfo?.assigned_accountant_id) {
-          await supabase.from("notifications").insert({
-            user_id: firmOwnerId,
+        // The PHP upload endpoint already creates the document record when client_id is provided
+        // Now create notification for accountant if assigned
+        if (clientInfo.assigned_accountant_id) {
+          await notificationsApi.create({
+            user_id: clientInfo.assigned_accountant_id,
             title: "New Document Uploaded",
-            message: `${uploaderName} uploaded "${file.name}"`,
-            document_id: newDoc?.id,
+            message: `A client uploaded "${file.name}" for review`,
+            document_id: uploadRes.data?.document_id,
           });
         }
       }
@@ -294,6 +268,7 @@ export default function ClientDashboard() {
       setPreviews([]);
       fetchClientData();
     } catch (error: any) {
+      console.error("Upload error:", error);
       toast({ title: "Upload failed", description: error.message, variant: "destructive" });
     } finally {
       setUploading(false);
@@ -301,7 +276,7 @@ export default function ClientDashboard() {
   };
 
   const markNotificationRead = async (id: string) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    await notificationsApi.markRead(id);
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
   };
 
