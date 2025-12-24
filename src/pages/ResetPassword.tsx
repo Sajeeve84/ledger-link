@@ -1,31 +1,26 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { FileUp, Lock, ArrowLeft, CheckCircle } from "lucide-react";
 import { z } from "zod";
-
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { toast } = useToast();
 
   const token = searchParams.get("token");
-  const apiOverride = searchParams.get("api");
-  const effectiveApiBaseUrl = (apiOverride || API_BASE_URL).replace(/\/+$/, "");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
-  const [debug, setDebug] = useState<{ status?: number; json?: any; api?: string } | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -60,30 +55,25 @@ export default function ResetPassword() {
 
     setLoading(true);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
     try {
-      console.log("ResetPassword: submitting", {
-        apiBase: effectiveApiBaseUrl,
-        tokenPreview: token.slice(0, 8) + "...",
+      const { data, error } = await supabase.functions.invoke('password-reset-confirm', {
+        body: { token, password },
       });
 
-      const res = await fetch(`${effectiveApiBaseUrl}/auth/reset-password.php`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
-        signal: controller.signal,
-      });
-
-      const json = await res.json().catch(() => ({}));
-      setDebug({ status: res.status, json, api: effectiveApiBaseUrl });
-      console.log("ResetPassword: response", { status: res.status, json });
-
-      if (!res.ok || json?.error) {
+      if (error) {
+        console.error("Password reset error:", error);
         toast({
           title: "Reset Failed",
-          description: json?.error || `Reset failed (HTTP ${res.status}).`,
+          description: "Failed to reset password. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data?.error) {
+        toast({
+          title: "Reset Failed",
+          description: data.error,
           variant: "destructive",
         });
         return;
@@ -94,18 +84,14 @@ export default function ResetPassword() {
         title: "Password Reset!",
         description: "Your password has been reset successfully.",
       });
-    } catch (error: any) {
-      console.error("ResetPassword: unexpected error", error);
+    } catch (error) {
+      console.error("Reset error:", error);
       toast({
         title: "Error",
-        description:
-          error?.name === "AbortError"
-            ? `Request timed out. (API: ${effectiveApiBaseUrl})`
-            : `Something went wrong. (API: ${effectiveApiBaseUrl})`,
+        description: "Something went wrong. Please try again.",
         variant: "destructive",
       });
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -186,14 +172,7 @@ export default function ResetPassword() {
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">Create New Password</h2>
             <p className="text-muted-foreground mt-2">Enter your new password below</p>
-            {!apiOverride && (
-              <p className="text-xs text-destructive mt-2">
-                This reset link is missing the <code>api=</code> parameter. Request a NEW reset email from the same environment you’re using.
-              </p>
-            )}
-            <p className="text-xs text-muted-foreground mt-2 break-all">Reset API: {effectiveApiBaseUrl}</p>
           </div>
-
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -237,15 +216,6 @@ export default function ResetPassword() {
             >
               {loading ? "Resetting..." : "Reset Password"}
             </Button>
-
-            {debug && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                <div className="break-all"><span className="font-medium">Debug API:</span> {debug.api}</div>
-                <div><span className="font-medium">HTTP:</span> {debug.status ?? "-"}</div>
-                <div className="break-all"><span className="font-medium">Response:</span> {typeof debug.json === "string" ? debug.json : JSON.stringify(debug.json)}</div>
-              </div>
-            )}
-
           </form>
         </div>
       </div>
