@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { authApi } from "@/lib/api";
+import { API_BASE_URL, authApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { FileUp, Mail, Lock, User, Building, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
@@ -141,8 +141,8 @@ export default function Auth() {
       }
       
       if (response.success && response.reset_token) {
-        // Build the reset link
-        const resetLink = `${window.location.origin}/reset-password?token=${response.reset_token}`;
+        // Build the reset link (include the API base used to create the token, to avoid env mismatches)
+        const resetLink = `${window.location.origin}/reset-password?token=${response.reset_token}&api=${encodeURIComponent(API_BASE_URL)}`;
         
         // Send email via edge function using your SMTP settings
         const { error: emailError } = await supabase.functions.invoke('send-reset-email', {

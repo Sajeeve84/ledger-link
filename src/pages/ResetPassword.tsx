@@ -17,6 +17,8 @@ export default function ResetPassword() {
   const { toast } = useToast();
 
   const token = searchParams.get("token");
+  const apiOverride = searchParams.get("api");
+  const effectiveApiBaseUrl = (apiOverride || API_BASE_URL).replace(/\/+$/, "");
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -57,33 +59,51 @@ export default function ResetPassword() {
 
     setLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
     try {
-      console.log("ResetPassword: submitting", { API_BASE_URL, tokenPreview: token.slice(0, 8) + "..." });
+      console.log("ResetPassword: submitting", {
+        apiBase: effectiveApiBaseUrl,
+        tokenPreview: token.slice(0, 8) + "...",
+      });
 
-      const response = await authApi.resetPassword(token, password);
-      console.log("ResetPassword: response", response);
+      const res = await fetch(`${effectiveApiBaseUrl}/auth/reset-password.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+        signal: controller.signal,
+      });
 
-      if (response.error) {
+      const json = await res.json().catch(() => ({}));
+      console.log("ResetPassword: response", { status: res.status, json });
+
+      if (!res.ok || json?.error) {
         toast({
           title: "Reset Failed",
-          description: response.error,
+          description: json?.error || `Reset failed (HTTP ${res.status}).`,
           variant: "destructive",
         });
-      } else {
-        setSuccess(true);
-        toast({
-          title: "Password Reset!",
-          description: "Your password has been reset successfully.",
-        });
+        return;
       }
-    } catch (error) {
+
+      setSuccess(true);
+      toast({
+        title: "Password Reset!",
+        description: "Your password has been reset successfully.",
+      });
+    } catch (error: any) {
       console.error("ResetPassword: unexpected error", error);
       toast({
         title: "Error",
-        description: `Something went wrong. Please try again. (API: ${API_BASE_URL})`,
+        description:
+          error?.name === "AbortError"
+            ? `Request timed out. (API: ${effectiveApiBaseUrl})`
+            : `Something went wrong. (API: ${effectiveApiBaseUrl})`,
         variant: "destructive",
       });
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -163,9 +183,12 @@ export default function ResetPassword() {
 
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">Create New Password</h2>
-            <p className="text-muted-foreground mt-2">
-              Enter your new password below
-            </p>
+            <p className="text-muted-foreground mt-2">Enter your new password below</p>
+            {apiOverride && (
+              <p className="text-xs text-muted-foreground mt-1 break-all">
+                Using reset API: {effectiveApiBaseUrl}
+              </p>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
