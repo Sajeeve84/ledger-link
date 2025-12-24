@@ -134,8 +134,9 @@ export default function Auth() {
       const response = await authApi.forgotPassword(forgotEmail);
 
       if (response.error) {
+        // Show specific error from backend
         setForgotError(response.error);
-      } else {
+      } else if (response.success) {
         setForgotSent(true);
         // If in development and token is returned, show reset link
         if (response.reset_token) {
@@ -145,9 +146,13 @@ export default function Auth() {
           });
           console.log(`Reset password link: ${window.location.origin}/reset-password?token=${response.reset_token}`);
         }
+      } else {
+        // Unknown response format
+        setForgotError("Unable to process request. Please ensure the password reset table exists in your database.");
       }
-    } catch (error) {
-      setForgotError("Something went wrong. Please try again.");
+    } catch (error: any) {
+      console.error("Forgot password error:", error);
+      setForgotError(error?.message || "Network error. Please check if the API server is running.");
     } finally {
       setForgotLoading(false);
     }
