@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "./DashboardLayout";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
@@ -8,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { documentsApi, notificationsApi, clientsApi } from "@/lib/api";
+import { documentsApi, notificationsApi, clientsApi, firmsApi, API_BASE_URL } from "@/lib/api";
 import {
   LayoutDashboard,
   FileText,
@@ -68,31 +67,105 @@ export default function AccountantDashboard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  const getFileUrl = useCallback((filePath: string) => {
+    if (!filePath) return "";
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+    const origin = API_BASE_URL.replace(/\/api\/?$/, "");
+    return `${origin}/${filePath.replace(/^\//, "")}`;
+  }, []);
+
   const fetchDocuments = useCallback(async () => {
     if (!user) return;
 
     try {
-      // Get documents for clients assigned to this accountant via PHP API
-      const response = await documentsApi.getAssigned();
-      
-      if (response.error) {
-        console.error("Error fetching documents:", response.error);
+      const firmRes = await firmsApi.get();
+      console.log("[AccountantDashboard] firmsApi.get()", firmRes);
+      if (firmRes.error || !firmRes.data?.id) {
+        toast({
+          title: "Couldn't load firm",
+          description: firmRes.error || "No firm found for this account.",
+          variant: "destructive",
+        });
+        setDocuments([]);
         return;
       }
-      
-      if (response.data) {
-        setDocuments(response.data as Document[]);
+
+      const firmId = firmRes.data.id as string;
+
+      const clientsRes = await clientsApi.getByFirm(firmId);
+      console.log("[AccountantDashboard] clientsApi.getByFirm", firmId, clientsRes);
+      if (clientsRes.error) {
+        toast({
+          title: "Couldn't load clients",
+          description: clientsRes.error,
+          variant: "destructive",
+        });
+        setDocuments([]);
+        return;
       }
-    } catch (error) {
-      console.error("Error fetching documents:", error);
+
+      const allClients = (clientsRes.data || []) as any[];
+      const assignedClients = allClients.filter((c) => c.assigned_accountant_id === user.id);
+      const assignedClientIds = assignedClients.map((c) => c.id);
+
+      if (assignedClientIds.length === 0) {
+        setDocuments([]);
+        return;
+      }
+
+      const clientsMap: Record<string, any> = {};
+      assignedClients.forEach((c) => {
+        clientsMap[c.id] = c;
+      });
+
+      const docsRes = await documentsApi.getByFirm(firmId);
+      console.log("[AccountantDashboard] documentsApi.getByFirm", firmId, docsRes);
+      if (docsRes.error) {
+        toast({
+          title: "Couldn't load documents",
+          description: docsRes.error,
+          variant: "destructive",
+        });
+        setDocuments([]);
+        return;
+      }
+
+      const allDocs = (docsRes.data || []) as any[];
+      const assignedDocs = allDocs
+        .filter((d) => assignedClientIds.includes(d.client_id))
+        .map((d) => {
+          const c = clientsMap[d.client_id];
+          return {
+            id: d.id,
+            file_name: d.file_name,
+            file_path: d.file_path,
+            file_type: d.file_type ?? null,
+            status: d.status,
+            notes: d.notes ?? null,
+            uploaded_at: d.uploaded_at,
+            client_id: d.client_id,
+            company_name: c?.company_name ?? null,
+            client_name: c?.full_name ?? null,
+            client_email: c?.email ?? "",
+            client_user_id: c?.user_id ?? "",
+          } as Document;
+        });
+
+      setDocuments(assignedDocs);
+    } catch (error: any) {
+      toast({
+        title: "Failed to load documents",
+        description: error?.message || "Unknown error",
+        variant: "destructive",
+      });
+      setDocuments([]);
     }
-  }, [user]);
+  }, [toast, user]);
 
   useEffect(() => {
     if (user) {
       fetchDocuments();
-      
-      // Set up polling for updates (since we're using PHP backend)
+
       const interval = setInterval(fetchDocuments, 30000);
       return () => clearInterval(interval);
     }
@@ -176,53 +249,45 @@ export default function AccountantDashboard() {
     setActionDialogOpen(true);
   };
 
-  const handlePreview = async (doc: Document) => {
+  const handlePreview = (doc: Document) => {
     setSelectedDoc(doc);
     setPreviewLoading(true);
     setPreviewDialogOpen(true);
 
-    try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .createSignedUrl(doc.file_path, 3600);
-
-      if (error) throw error;
-      setPreviewUrl(data.signedUrl);
-    } catch (error: any) {
+    const url = getFileUrl(doc.file_path);
+    if (!url) {
       toast({
         title: "Preview failed",
-        description: error.message,
+        description: "Missing file path.",
         variant: "destructive",
       });
       setPreviewDialogOpen(false);
-    } finally {
       setPreviewLoading(false);
+      return;
     }
+
+    setPreviewUrl(url);
+    setPreviewLoading(false);
   };
 
-  const handleDownload = async (doc: Document) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from("documents")
-        .download(doc.file_path);
-
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.file_name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error: any) {
+  const handleDownload = (doc: Document) => {
+    const url = getFileUrl(doc.file_path);
+    if (!url) {
       toast({
         title: "Download failed",
-        description: error.message,
+        description: "Missing file path.",
         variant: "destructive",
       });
+      return;
     }
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = doc.file_name;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const pendingDocs = documents.filter((d) => d.status === "pending");
