@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL, authApi } from "@/lib/api";
+import { authApi } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { FileUp, Mail, Lock, User, Building, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
@@ -132,47 +132,33 @@ export default function Auth() {
     setForgotLoading(true);
 
     try {
-      // Call PHP backend to generate reset token
-      const response = await authApi.forgotPassword(forgotEmail);
+      // Call Lovable Cloud edge function for password reset
+      const { data, error } = await supabase.functions.invoke('password-reset-request', {
+        body: {
+          email: forgotEmail,
+          origin: window.location.origin,
+        },
+      });
 
-      if (response.error) {
-        setForgotError(response.error);
+      if (error) {
+        console.error("Password reset request error:", error);
+        setForgotError("Failed to send reset email. Please try again.");
         return;
       }
-      
-      if (response.success && response.reset_token) {
-        // Build the reset link (include the API base used to create the token, to avoid env mismatches)
-        const resetLink = `${window.location.origin}/reset-password?token=${response.reset_token}&api=${encodeURIComponent(API_BASE_URL)}`;
-        
-        // Send email via edge function using your SMTP settings
-        const { error: emailError } = await supabase.functions.invoke('send-reset-email', {
-          body: {
-            email: forgotEmail,
-            resetLink: resetLink,
-            userName: response.user_name || undefined,
-          },
-        });
 
-        if (emailError) {
-          console.error("Failed to send reset email:", emailError);
-          setForgotError("Failed to send reset email. Please try again.");
-          return;
-        }
-
-        setForgotSent(true);
-        toast({
-          title: "Reset Email Sent",
-          description: "Check your inbox for the password reset link.",
-        });
-      } else if (response.success) {
-        // User not found or generic success (for security, don't reveal if user exists)
-        setForgotSent(true);
-      } else {
-        setForgotError("Unable to process request. Please try again.");
+      if (data?.error) {
+        setForgotError(data.error);
+        return;
       }
+
+      setForgotSent(true);
+      toast({
+        title: "Reset Email Sent",
+        description: "If an account exists with that email, you'll receive a reset link.",
+      });
     } catch (error: any) {
       console.error("Forgot password error:", error);
-      setForgotError(error?.message || "Network error. Please check if the API server is running.");
+      setForgotError(error?.message || "Network error. Please try again.");
     } finally {
       setForgotLoading(false);
     }
