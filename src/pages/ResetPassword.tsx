@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { API_BASE_URL, authApi } from "@/lib/api";
+import { API_BASE_URL } from "@/lib/api";
 import { FileUp, Lock, ArrowLeft, CheckCircle } from "lucide-react";
 import { z } from "zod";
 
@@ -25,6 +25,7 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
+  const [debug, setDebug] = useState<{ status?: number; json?: any; api?: string } | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -76,6 +77,7 @@ export default function ResetPassword() {
       });
 
       const json = await res.json().catch(() => ({}));
+      setDebug({ status: res.status, json, api: effectiveApiBaseUrl });
       console.log("ResetPassword: response", { status: res.status, json });
 
       if (!res.ok || json?.error) {
@@ -184,12 +186,14 @@ export default function ResetPassword() {
           <div className="text-center lg:text-left">
             <h2 className="text-2xl font-bold text-foreground">Create New Password</h2>
             <p className="text-muted-foreground mt-2">Enter your new password below</p>
-            {apiOverride && (
-              <p className="text-xs text-muted-foreground mt-1 break-all">
-                Using reset API: {effectiveApiBaseUrl}
+            {!apiOverride && (
+              <p className="text-xs text-destructive mt-2">
+                This reset link is missing the <code>api=</code> parameter. Request a NEW reset email from the same environment you’re using.
               </p>
             )}
+            <p className="text-xs text-muted-foreground mt-2 break-all">Reset API: {effectiveApiBaseUrl}</p>
           </div>
+
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -233,6 +237,15 @@ export default function ResetPassword() {
             >
               {loading ? "Resetting..." : "Reset Password"}
             </Button>
+
+            {debug && (
+              <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+                <div className="break-all"><span className="font-medium">Debug API:</span> {debug.api}</div>
+                <div><span className="font-medium">HTTP:</span> {debug.status ?? "-"}</div>
+                <div className="break-all"><span className="font-medium">Response:</span> {typeof debug.json === "string" ? debug.json : JSON.stringify(debug.json)}</div>
+              </div>
+            )}
+
           </form>
         </div>
       </div>
