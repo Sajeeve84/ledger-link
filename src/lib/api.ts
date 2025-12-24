@@ -91,6 +91,7 @@ export const firmsApi = {
 export const clientsApi = {
   getByFirm: (firmId: string) => apiRequest<any[]>(`/clients/index.php?firm_id=${firmId}`),
   getOwn: () => apiRequest<any[]>('/clients/index.php'),
+  getAssigned: () => apiRequest<any[]>('/clients/assigned.php'),
   create: (data: { user_id: string; firm_id: string; company_name?: string }) =>
     apiRequest<any>('/clients/index.php', {
       method: 'POST',
@@ -118,6 +119,7 @@ export const documentsApi = {
   getByClient: (clientId: string) => apiRequest<any[]>(`/documents/index.php?client_id=${clientId}`),
   getByFirm: (firmId: string) => apiRequest<any[]>(`/documents/index.php?firm_id=${firmId}`),
   getOwn: () => apiRequest<any[]>('/documents/index.php'),
+  getAssigned: () => apiRequest<any[]>('/documents/assigned.php'),
   create: (data: { client_id: string; file_name: string; file_path: string; file_type?: string; file_size?: number }) =>
     apiRequest<any>('/documents/index.php', {
       method: 'POST',
