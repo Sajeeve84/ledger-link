@@ -90,12 +90,25 @@ export const authApi = {
   },
 
   forgotPassword: async (email: string) => {
-    const response = await fetch(`${API_BASE_URL}/auth/forgot-password.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    return response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/forgot-password.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response.json();
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        return { error: 'Request timed out. Please check if your PHP backend is running at ' + API_BASE_URL };
+      }
+      return { error: 'Network error: Cannot reach the API server. Make sure your PHP backend is running.' };
+    }
   },
 
   resetPassword: async (token: string, password: string) => {
