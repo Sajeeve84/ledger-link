@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { authApi } from "@/lib/api";
+import { API_BASE_URL, authApi } from "@/lib/api";
 import { FileUp, Lock, ArrowLeft, CheckCircle } from "lucide-react";
 import { z } from "zod";
+
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
@@ -57,7 +58,10 @@ export default function ResetPassword() {
     setLoading(true);
 
     try {
+      console.log("ResetPassword: submitting", { API_BASE_URL, tokenPreview: token.slice(0, 8) + "..." });
+
       const response = await authApi.resetPassword(token, password);
+      console.log("ResetPassword: response", response);
 
       if (response.error) {
         toast({
@@ -73,9 +77,10 @@ export default function ResetPassword() {
         });
       }
     } catch (error) {
+      console.error("ResetPassword: unexpected error", error);
       toast({
         title: "Error",
-        description: "Something went wrong. Please try again.",
+        description: `Something went wrong. Please try again. (API: ${API_BASE_URL})`,
         variant: "destructive",
       });
     } finally {
