@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { notificationsApi } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,57 +22,40 @@ export default function FirmNotificationsPage() {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      
-      // Subscribe to realtime notifications
-      const channel = supabase
-        .channel("firm-notifications")
-        .on(
-          "postgres_changes",
-          { 
-            event: "INSERT", 
-            schema: "public", 
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const newNotif = payload.new as Notification;
-            setNotifications((prev) => [newNotif, ...prev]);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      // Poll for new notifications every 30 seconds
+      pollIntervalRef.current = setInterval(fetchNotifications, 30000);
     }
+    
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [user]);
 
   const fetchNotifications = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-
-    if (data) {
-      setNotifications(data as Notification[]);
+    try {
+      const res = await notificationsApi.get();
+      if (res.data) {
+        setNotifications(res.data as Notification[]);
+      }
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const markAsRead = async (id: string) => {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("id", id);
-
-    if (!error) {
+    const res = await notificationsApi.markRead(id);
+    if (!res.error) {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
@@ -82,17 +65,21 @@ export default function FirmNotificationsPage() {
   const markAllAsRead = async () => {
     if (!user) return;
 
-    const { error } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
-
-    if (!error) {
+    // Mark each unread notification as read
+    const unreadNotifs = notifications.filter(n => !n.is_read);
+    
+    try {
+      await Promise.all(unreadNotifs.map(n => notificationsApi.markRead(n.id)));
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       toast({
         title: "All marked as read",
         description: "All notifications have been marked as read",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to mark notifications as read",
+        variant: "destructive",
       });
     }
   };
