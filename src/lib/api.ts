@@ -1,7 +1,20 @@
 // API Configuration for PHP Backend
-// Update this URL to match your XAMPP setup
+// Override at runtime by setting localStorage key: API_BASE_URL
 
-export const API_BASE_URL = 'http://ledger-link.developer.io/api';
+const DEFAULT_LOCAL_API_BASE_URL = "http://localhost/docuflow-api/api";
+const DEFAULT_REMOTE_API_BASE_URL = "http://ledger-link.developer.io/api";
+
+export const API_BASE_URL = (() => {
+  if (typeof window === "undefined") return DEFAULT_REMOTE_API_BASE_URL;
+
+  const override = window.localStorage.getItem("API_BASE_URL");
+  if (override && override.trim()) return override.trim().replace(/\/+$/, "");
+
+  const host = window.location.hostname;
+  if (host === "localhost" || host === "127.0.0.1") return DEFAULT_LOCAL_API_BASE_URL;
+
+  return DEFAULT_REMOTE_API_BASE_URL;
+})();
 
 // Helper to get auth headers
 export const getAuthHeaders = (): HeadersInit => {
