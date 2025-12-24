@@ -25,8 +25,10 @@ try {
                 $stmt->execute([$clientId]);
             } elseif ($firmId) {
                 $stmt = $db->prepare("
-                    SELECT d.* FROM documents d
+                    SELECT d.*, c.company_name, c.user_id as client_user_id, u.full_name as client_name, u.email as client_email
+                    FROM documents d
                     JOIN clients c ON d.client_id = c.id
+                    JOIN users u ON c.user_id = u.id
                     WHERE c.firm_id = ?
                     ORDER BY d.uploaded_at DESC
                 ");

@@ -32,6 +32,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { documentsApi } from "@/lib/api";
 
 type DocumentStatus = "pending" | "posted" | "clarification_needed" | "resend_requested";
 
@@ -45,6 +46,10 @@ interface Document {
   notes: string | null;
   uploaded_at: string;
   client_id: string;
+  company_name?: string | null;
+  client_name?: string | null;
+  client_email?: string;
+  client_user_id?: string;
 }
 
 interface Client {
@@ -72,23 +77,28 @@ export default function FirmDocumentsPage({ firmId, clients }: FirmDocumentsPage
 
   useEffect(() => {
     fetchDocuments();
-  }, [clients]);
+  }, [firmId]);
 
   const fetchDocuments = async () => {
-    if (clients.length === 0) {
+    if (!firmId) {
       setLoading(false);
       return;
     }
 
-    const clientIds = clients.map((c) => c.id);
-    const { data, error } = await supabase
-      .from("documents")
-      .select("*")
-      .in("client_id", clientIds)
-      .order("uploaded_at", { ascending: false });
-
-    if (data) {
-      setDocuments(data as Document[]);
+    try {
+      const response = await documentsApi.getByFirm(firmId);
+      
+      if (response.error) {
+        console.error("Error fetching documents:", response.error);
+        setLoading(false);
+        return;
+      }
+      
+      if (response.data) {
+        setDocuments(response.data as Document[]);
+      }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
     }
     setLoading(false);
   };
@@ -103,8 +113,14 @@ export default function FirmDocumentsPage({ firmId, clients }: FirmDocumentsPage
     return statusMap[status];
   };
 
-  const getClientName = (clientId: string) => {
-    const client = clients.find((c) => c.id === clientId);
+  const getClientName = (doc: Document) => {
+    // First try to use embedded client info from PHP API
+    if (doc.client_name) return doc.client_name;
+    if (doc.company_name) return doc.company_name;
+    if (doc.client_email) return doc.client_email;
+    
+    // Fallback to clients prop lookup
+    const client = clients.find((c) => c.id === doc.client_id);
     return client?.profiles?.full_name || client?.company_name || client?.profiles?.email || "Unknown";
   };
 
@@ -294,7 +310,7 @@ export default function FirmDocumentsPage({ firmId, clients }: FirmDocumentsPage
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1">
                           <span className="flex items-center gap-1">
                             <User className="w-3 h-3" />
-                            {getClientName(doc.client_id)}
+                            {getClientName(doc)}
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />

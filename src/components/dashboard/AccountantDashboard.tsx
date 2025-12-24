@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { documentsApi, notificationsApi, clientsApi } from "@/lib/api";
 import {
   LayoutDashboard,
   FileText,
@@ -46,11 +47,11 @@ interface Document {
   status: DocumentStatus;
   notes: string | null;
   uploaded_at: string;
-  clients: {
-    id: string;
-    company_name: string | null;
-    profiles: { full_name: string | null; email: string } | null;
-  } | null;
+  client_id: string;
+  company_name: string | null;
+  client_name: string | null;
+  client_email: string;
+  client_user_id: string;
 }
 
 export default function AccountantDashboard() {
@@ -67,83 +68,35 @@ export default function AccountantDashboard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  useEffect(() => {
-    if (user) {
-      fetchDocuments();
-      subscribeToDocuments();
+  const fetchDocuments = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      // Get documents for clients assigned to this accountant via PHP API
+      const response = await documentsApi.getAssigned();
+      
+      if (response.error) {
+        console.error("Error fetching documents:", response.error);
+        return;
+      }
+      
+      if (response.data) {
+        setDocuments(response.data as Document[]);
+      }
+    } catch (error) {
+      console.error("Error fetching documents:", error);
     }
   }, [user]);
 
-  const fetchDocuments = async () => {
-    if (!user) return;
-
-    // First get clients assigned to this accountant
-    const { data: clientsData } = await supabase
-      .from("clients")
-      .select("id, user_id, company_name")
-      .eq("assigned_accountant_id", user.id);
-
-    if (!clientsData || clientsData.length === 0) {
-      setDocuments([]);
-      return;
+  useEffect(() => {
+    if (user) {
+      fetchDocuments();
+      
+      // Set up polling for updates (since we're using PHP backend)
+      const interval = setInterval(fetchDocuments, 30000);
+      return () => clearInterval(interval);
     }
-
-    const clientIds = clientsData.map((c) => c.id);
-    const userIds = clientsData.map((c) => c.user_id);
-
-    // Fetch profiles for all clients
-    const { data: profilesData } = await supabase
-      .from("profiles")
-      .select("id, full_name, email")
-      .in("id", userIds);
-
-    const profilesMap: Record<string, { full_name: string | null; email: string }> = {};
-    profilesData?.forEach((p) => {
-      profilesMap[p.id] = { full_name: p.full_name, email: p.email };
-    });
-
-    // Build clients map with profiles
-    const clientsMap: Record<string, { id: string; company_name: string | null; profiles: { full_name: string | null; email: string } | null }> = {};
-    clientsData.forEach((c) => {
-      clientsMap[c.id] = {
-        id: c.id,
-        company_name: c.company_name,
-        profiles: profilesMap[c.user_id] || null,
-      };
-    });
-
-    // Fetch documents
-    const { data: docsData } = await supabase
-      .from("documents")
-      .select("id, file_name, file_path, file_type, status, notes, uploaded_at, client_id")
-      .in("client_id", clientIds)
-      .order("uploaded_at", { ascending: false });
-
-    if (docsData) {
-      const docsWithClients = docsData.map((doc) => ({
-        ...doc,
-        clients: clientsMap[doc.client_id] || null,
-      }));
-      setDocuments(docsWithClients as Document[]);
-    }
-  };
-
-  const subscribeToDocuments = () => {
-    const channel = supabase
-      .channel("documents-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "documents" },
-        () => {
-          fetchDocuments();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
+  }, [user, fetchDocuments]);
 
   const handleAction = async () => {
     if (!selectedDoc) return;
@@ -151,37 +104,28 @@ export default function AccountantDashboard() {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from("documents")
-        .update({ status: actionType, notes })
-        .eq("id", selectedDoc.id);
+      // Update document status via PHP API
+      const response = await documentsApi.update(selectedDoc.id, {
+        status: actionType,
+        notes,
+      });
 
-      if (error) throw error;
+      if (response.error) throw new Error(response.error);
 
-      // Create notification for client
-      if (selectedDoc.clients) {
-        const clientUserId = await supabase
-          .from("clients")
-          .select("user_id")
-          .eq("id", selectedDoc.clients.id)
-          .single();
+      // Create notification for client via PHP API
+      const statusMessages: Record<DocumentStatus, string> = {
+        posted: "Your document has been posted successfully",
+        clarification_needed: `Clarification needed for ${selectedDoc.file_name}: ${notes}`,
+        resend_requested: `Please resend ${selectedDoc.file_name}: ${notes}`,
+        pending: "Document status updated",
+      };
 
-        if (clientUserId.data) {
-          const statusMessages: Record<DocumentStatus, string> = {
-            posted: "Your document has been posted successfully",
-            clarification_needed: `Clarification needed for ${selectedDoc.file_name}: ${notes}`,
-            resend_requested: `Please resend ${selectedDoc.file_name}: ${notes}`,
-            pending: "Document status updated",
-          };
-
-          await supabase.from("notifications").insert({
-            user_id: clientUserId.data.user_id,
-            title: `Document ${actionType.replace("_", " ")}`,
-            message: statusMessages[actionType],
-            document_id: selectedDoc.id,
-          });
-        }
-      }
+      await notificationsApi.create({
+        user_id: selectedDoc.client_user_id,
+        title: `Document ${actionType.replace("_", " ")}`,
+        message: statusMessages[actionType],
+        document_id: selectedDoc.id,
+      });
 
       toast({
         title: "Success",
@@ -377,7 +321,7 @@ export default function AccountantDashboard() {
                       <div>
                         <p className="font-medium text-foreground">{doc.file_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {doc.clients?.profiles?.full_name || doc.clients?.company_name || "Unknown client"} •{" "}
+                          {doc.client_name || doc.company_name || "Unknown client"} •{" "}
                           {new Date(doc.uploaded_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -455,7 +399,7 @@ export default function AccountantDashboard() {
                       <div>
                         <p className="font-medium text-foreground">{doc.file_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {doc.clients?.profiles?.full_name || doc.clients?.company_name} •{" "}
+                          {doc.client_name || doc.company_name} •{" "}
                           {new Date(doc.uploaded_at).toLocaleDateString()}
                         </p>
                       </div>
