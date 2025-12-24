@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 import { FileUp, Mail, Lock, User, Building, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
 import {
@@ -131,24 +132,43 @@ export default function Auth() {
     setForgotLoading(true);
 
     try {
+      // Call PHP backend to generate reset token
       const response = await authApi.forgotPassword(forgotEmail);
 
       if (response.error) {
-        // Show specific error from backend
         setForgotError(response.error);
-      } else if (response.success) {
-        setForgotSent(true);
-        // If in development and token is returned, show reset link
-        if (response.reset_token) {
-          toast({
-            title: "Reset Link Generated",
-            description: "Check console for reset link (development only)",
-          });
-          console.log(`Reset password link: ${window.location.origin}/reset-password?token=${response.reset_token}`);
+        return;
+      }
+      
+      if (response.success && response.reset_token) {
+        // Build the reset link
+        const resetLink = `${window.location.origin}/reset-password?token=${response.reset_token}`;
+        
+        // Send email via edge function using your SMTP settings
+        const { error: emailError } = await supabase.functions.invoke('send-reset-email', {
+          body: {
+            email: forgotEmail,
+            resetLink: resetLink,
+            userName: response.user_name || undefined,
+          },
+        });
+
+        if (emailError) {
+          console.error("Failed to send reset email:", emailError);
+          setForgotError("Failed to send reset email. Please try again.");
+          return;
         }
+
+        setForgotSent(true);
+        toast({
+          title: "Reset Email Sent",
+          description: "Check your inbox for the password reset link.",
+        });
+      } else if (response.success) {
+        // User not found or generic success (for security, don't reveal if user exists)
+        setForgotSent(true);
       } else {
-        // Unknown response format
-        setForgotError("Unable to process request. Please ensure the password reset table exists in your database.");
+        setForgotError("Unable to process request. Please try again.");
       }
     } catch (error: any) {
       console.error("Forgot password error:", error);

@@ -73,8 +73,8 @@ try {
     echo json_encode([
         'success' => true,
         'message' => 'If an account with that email exists, you will receive a password reset link.',
-        // Only include token in development - remove in production
         'reset_token' => $token,
+        'user_name' => $user['full_name'],
         'expires_at' => $expiresAt
     ]);
     
