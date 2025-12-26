@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { hash } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -96,14 +95,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("Found user email:", profile.email);
 
-    // Hash the new password using bcrypt (compatible with PHP's password_hash)
-    const passwordHash = await hash(password);
-    console.log("Password hashed successfully");
-
     // Call the PHP backend to update the password
-    // Since PHP backend uses its own MySQL database, we need to call it
+    // PHP will hash the password using password_hash()
     const phpBackendUrl = Deno.env.get("PHP_BACKEND_URL") || "https://ledger-link.developer.io";
     
+    console.log("Calling PHP backend to update password");
     const updateResponse = await fetch(`${phpBackendUrl}/api/auth/update-password.php`, {
       method: "POST",
       headers: {
@@ -111,7 +107,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
       body: JSON.stringify({
         email: profile.email,
-        password_hash: passwordHash,
+        password: password,
         internal_key: Deno.env.get("INTERNAL_API_KEY") || "supabase-internal-update",
       }),
     });
