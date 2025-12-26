@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $input = json_decode(file_get_contents('php://input'), true);
 
 $email = trim($input['email'] ?? '');
-$passwordHash = $input['password_hash'] ?? '';
+$password = $input['password'] ?? '';
 $internalKey = $input['internal_key'] ?? '';
 
 // Validate internal key for security
@@ -38,9 +38,15 @@ if (empty($email)) {
     exit;
 }
 
-if (empty($passwordHash)) {
+if (empty($password)) {
     http_response_code(400);
-    echo json_encode(['error' => 'Password hash is required']);
+    echo json_encode(['error' => 'Password is required']);
+    exit;
+}
+
+if (strlen($password) < 6) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Password must be at least 6 characters']);
     exit;
 }
 
@@ -57,6 +63,9 @@ try {
         echo json_encode(['error' => 'User not found']);
         exit;
     }
+    
+    // Hash the password using PHP's password_hash
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
     
     // Update user's password
     $stmt = $db->prepare("UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?");
