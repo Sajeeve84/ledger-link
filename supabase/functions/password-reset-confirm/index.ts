@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { hash } from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -34,7 +35,7 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log("Password reset confirm request");
+    console.log("Password reset confirm request received");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -43,8 +44,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Hash the token to compare with DB
     const tokenHash = await hashToken(token);
+    console.log("Looking up token hash");
 
-    // Find valid token
+    // Find valid token with user email
     const { data: resetToken, error: tokenError } = await supabase
       .from("password_reset_tokens")
       .select("id, user_id, expires_at, used_at")
@@ -57,7 +59,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     if (!resetToken) {
-      console.log("No matching token found");
+      console.log("No matching token found for hash");
       return new Response(JSON.stringify({ error: "Invalid or expired reset token" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -80,16 +82,47 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Update user password using admin API
-    const { error: updateError } = await supabase.auth.admin.updateUserById(
-      resetToken.user_id,
-      { password }
-    );
+    // Get user email from profiles table
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", resetToken.user_id)
+      .maybeSingle();
 
-    if (updateError) {
-      console.error("Password update error:", updateError);
-      throw new Error("Failed to update password");
+    if (profileError || !profile) {
+      console.error("Profile lookup error:", profileError);
+      throw new Error("User not found");
     }
+
+    console.log("Found user email:", profile.email);
+
+    // Hash the new password using bcrypt (compatible with PHP's password_hash)
+    const passwordHash = await hash(password);
+    console.log("Password hashed successfully");
+
+    // Call the PHP backend to update the password
+    // Since PHP backend uses its own MySQL database, we need to call it
+    const phpBackendUrl = Deno.env.get("PHP_BACKEND_URL") || "https://ledger-link.developer.io";
+    
+    const updateResponse = await fetch(`${phpBackendUrl}/api/auth/update-password.php`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: profile.email,
+        password_hash: passwordHash,
+        internal_key: Deno.env.get("INTERNAL_API_KEY") || "supabase-internal-update",
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      const errorData = await updateResponse.json().catch(() => ({}));
+      console.error("PHP backend update failed:", errorData);
+      throw new Error(errorData.error || "Failed to update password in backend");
+    }
+
+    console.log("Password updated in PHP backend");
 
     // Mark token as used
     await supabase
