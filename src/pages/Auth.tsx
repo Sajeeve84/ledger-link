@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 import { FileUp, Mail, Lock, User, Building, ArrowLeft, Loader2 } from "lucide-react";
 import { z } from "zod";
 import {
@@ -132,22 +131,12 @@ export default function Auth() {
     setForgotLoading(true);
 
     try {
-      // Call Lovable Cloud edge function for password reset
-      const { data, error } = await supabase.functions.invoke('password-reset-request', {
-        body: {
-          email: forgotEmail,
-          origin: window.location.origin,
-        },
-      });
+      // Call PHP backend for password reset
+      const result = await authApi.forgotPassword(forgotEmail);
 
-      if (error) {
-        console.error("Password reset request error:", error);
-        setForgotError("Failed to send reset email. Please try again.");
-        return;
-      }
-
-      if (data?.error) {
-        setForgotError(data.error);
+      if (result.error) {
+        console.error("Password reset request error:", result.error);
+        setForgotError(result.error);
         return;
       }
 

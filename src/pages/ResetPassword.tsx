@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authApi } from "@/lib/api";
 import { FileUp, Lock, ArrowLeft, CheckCircle } from "lucide-react";
 import { z } from "zod";
 
@@ -56,24 +56,13 @@ export default function ResetPassword() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('password-reset-confirm', {
-        body: { token, password },
-      });
+      const result = await authApi.resetPassword(token, password);
 
-      if (error) {
-        console.error("Password reset error:", error);
+      if (result.error) {
+        console.error("Password reset error:", result.error);
         toast({
           title: "Reset Failed",
-          description: "Failed to reset password. Please try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (data?.error) {
-        toast({
-          title: "Reset Failed",
-          description: data.error,
+          description: result.error,
           variant: "destructive",
         });
         return;
@@ -82,7 +71,7 @@ export default function ResetPassword() {
       setSuccess(true);
       toast({
         title: "Password Reset!",
-        description: "Your password has been reset successfully.",
+        description: result.message || "Your password has been reset successfully.",
       });
     } catch (error) {
       console.error("Reset error:", error);
