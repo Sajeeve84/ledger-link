@@ -141,10 +141,27 @@ export default function Auth() {
       }
 
       setForgotSent(true);
-      toast({
-        title: "Reset Email Sent",
-        description: "If an account exists with that email, you'll receive a reset link.",
-      });
+
+      const emailSent = result?.email_sent !== false; // treat undefined as "sent" to keep generic UX
+      if (!emailSent && result?.debug_email_error) {
+        toast({
+          title: "Email not sent (dev)",
+          description: result.debug_email_error,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Reset Email Sent",
+          description: "If an account exists with that email, you'll receive a reset link.",
+        });
+      }
+
+      if (!emailSent && result?.debug_reset_link) {
+        toast({
+          title: "Reset link (dev)",
+          description: result.debug_reset_link,
+        });
+      }
     } catch (error: any) {
       console.error("Forgot password error:", error);
       setForgotError(error?.message || "Network error. Please try again.");
