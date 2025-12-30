@@ -2,6 +2,8 @@
 /**
  * Minimal SMTP mailer (no external dependencies)
  *
+ * Supports loading SMTP credentials from backend/.env (see helpers/dotenv.php)
+ *
  * Required environment variables:
  * - SMTP_HOST
  * - SMTP_PORT (usually 587 for STARTTLS or 465 for implicit TLS)
@@ -12,6 +14,9 @@
  * Optional:
  * - SMTP_SECURE: "starttls" | "tls" | "ssl" (auto-detected if omitted)
  */
+
+require_once __DIR__ . '/dotenv.php';
+load_dotenv();
 
 function smtp_send_mail(string $to, string $subject, string $htmlBody, ?string $textBody = null, ?string $from = null): array
 {
