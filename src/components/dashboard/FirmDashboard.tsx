@@ -9,7 +9,6 @@ import FirmDocumentsPage from "./firm/FirmDocumentsPage";
 import FirmNotificationsPage from "./firm/FirmNotificationsPage";
 import { useToast } from "@/hooks/use-toast";
 import { invitesApi, firmsApi, clientsApi, accountantsApi, documentsApi, notificationsApi } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   Users,
@@ -242,21 +241,19 @@ export default function FirmDashboard() {
       const baseUrl = window.location.origin;
       const inviteLink = `${baseUrl}/invite?token=${response.data.token}`;
 
-      // Send invite email via edge function
-      const { error: emailError } = await supabase.functions.invoke("send-invite-email", {
-        body: {
-          email,
-          inviteLink,
-          inviteType,
-          firmName: firmName || "our firm",
-        },
+      // Send invite email via PHP backend SMTP
+      const emailResponse = await invitesApi.sendEmail({
+        email,
+        inviteLink,
+        inviteType,
+        firmName: firmName || "our firm",
       });
 
-      if (emailError) {
-        console.error("Email send error:", emailError);
+      if (emailResponse.error) {
+        console.error("Email send error:", emailResponse.error);
         toast({
           title: "Warning",
-          description: `Invite created but email failed to send: ${emailError.message}`,
+          description: `Invite created but email failed to send: ${emailResponse.error}`,
           variant: "destructive",
         });
       } else {
