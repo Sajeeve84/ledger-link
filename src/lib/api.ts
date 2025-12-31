@@ -206,6 +206,11 @@ export const invitesApi = {
     apiRequest<any>(`/invites/index.php?token=${token}`, {
       method: 'PUT',
     }),
+  sendEmail: (data: { email: string; inviteLink: string; inviteType: string; firmName: string }) =>
+    apiRequest<any>('/invites/send-email.php', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
 
 // Profiles API

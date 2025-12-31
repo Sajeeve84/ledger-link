@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import NotificationPopover from "./NotificationPopover";
+import ApiSettings from "@/components/ApiSettings";
 import { useToast } from "@/hooks/use-toast";
 import {
   FileUp,
@@ -142,6 +143,7 @@ export default function DashboardLayout({ children, navItems, title }: Dashboard
           </button>
           <h1 className="text-lg font-semibold text-foreground">{title} Dashboard</h1>
           <div className="flex items-center gap-2">
+            <ApiSettings />
             <NotificationPopover onNewNotification={handleNewNotification} />
           </div>
         </header>
